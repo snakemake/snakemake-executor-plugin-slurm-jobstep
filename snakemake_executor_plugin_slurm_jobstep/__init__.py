@@ -137,13 +137,15 @@ class Executor(RealExecutor):
         # this dict is to support the to be implemented feature of oversubscription in
         # "ordinary" group jobs.
         jobsteps[job] = subprocess.Popen(call, shell=True)
-        self.report_job_submission(SubmittedJobInfo(job))
+
+        job_info = SubmittedJobInfo(job)
+        self.report_job_submission(job_info)
 
         # wait until all steps are finished
         error = False
         for job, proc in jobsteps.items():
             if proc.wait() != 0:
-                self.print_job_error(job)
+                self.print_job_error(job_info)
                 error = True
         if error:
             self.report_job_error(job)
