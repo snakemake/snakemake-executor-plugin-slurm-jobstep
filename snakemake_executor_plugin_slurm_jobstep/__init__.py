@@ -15,7 +15,6 @@ from snakemake_interface_executor_plugins.jobs import (
     ExecutorJobInterface,
 )
 from snakemake_interface_executor_plugins.settings import ExecMode
-from snakemake_interface_common.exceptions import WorkflowError
 
 
 # Required:
@@ -54,17 +53,8 @@ class Executor(RealExecutor):
             pass_envvar_declarations_to_cmd=False,
         )
         # These environment variables are set by SLURM.
-
-        self.mem_per_node = os.getenv("SLURM_MEM_PER_NODE")
-        self.cpus_on_node = os.getenv("SLURM_CPUS_ON_NODE")
+        # only needed for commented out jobstep handling below
         self.jobid = os.getenv("SLURM_JOB_ID")
-        if self.jobid is None:
-            raise WorkflowError(
-                "Environment variable SLURM_JOB_ID is not set, which is unsupported. "
-                "Note that the slurm-jobstep executor plugin can only be used inside "
-                "of SLURM jobs and is meant to be triggered only by the slurm executor "
-                "plugin."
-            )
 
     def run_job(self, job: ExecutorJobInterface):
         # Implement here how to run a job.

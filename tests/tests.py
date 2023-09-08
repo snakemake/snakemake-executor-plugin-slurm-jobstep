@@ -1,13 +1,6 @@
-import os
 from typing import Optional
 import snakemake.common.tests
 from snakemake_interface_executor_plugins import ExecutorSettingsBase
-
-
-# fake slurm job environment
-os.environ["SLURM_JOB_ID"] = "100"
-os.environ["SLURM_MEM_PER_NODE"] = "100"
-os.environ["SLURM_CPUS_ON_NODE"] = "1"
 
 
 class TestWorkflowsBase(snakemake.common.tests.TestWorkflowsBase):
