@@ -132,15 +132,10 @@ class Executor(RealExecutor):
         self.report_job_submission(job_info)
 
         # wait until all steps are finished
-        error = False
-        for job, proc in jobsteps.items():
-            if proc.wait() != 0:
-                self.print_job_error(job_info)
-                error = True
-        if error:
-            self.report_job_error(job)
+        if any(proc.wait() != 0 for proc in jobsteps.values()):
+            self.report_job_error(job_info)
         else:
-            self.report_job_success(job)
+            self.report_job_success(job_info)
 
     def cancel(self):
         pass
