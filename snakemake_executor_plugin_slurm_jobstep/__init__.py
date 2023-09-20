@@ -12,7 +12,7 @@ from snakemake_interface_executor_plugins import CommonSettings
 from snakemake_interface_executor_plugins.workflow import WorkflowExecutorInterface
 from snakemake_interface_executor_plugins.logging import LoggerExecutorInterface
 from snakemake_interface_executor_plugins.jobs import (
-    ExecutorJobInterface,
+    JobExecutorInterface,
 )
 from snakemake_interface_executor_plugins.settings import ExecMode
 
@@ -56,7 +56,7 @@ class Executor(RealExecutor):
         # only needed for commented out jobstep handling below
         self.jobid = os.getenv("SLURM_JOB_ID")
 
-    def run_job(self, job: ExecutorJobInterface):
+    def run_job(self, job: JobExecutorInterface):
         # Implement here how to run a job.
         # You can access the job's resources, etc.
         # via the job object.
