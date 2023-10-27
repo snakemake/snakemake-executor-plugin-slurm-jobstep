@@ -8,8 +8,6 @@ import subprocess
 import sys
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
 from snakemake_interface_executor_plugins.executors.real import RealExecutor
-from snakemake_interface_executor_plugins.workflow import WorkflowExecutorInterface
-from snakemake_interface_executor_plugins.logging import LoggerExecutorInterface
 from snakemake_interface_executor_plugins.jobs import (
     JobExecutorInterface,
 )
@@ -29,28 +27,17 @@ common_settings = CommonSettings(
     # filesystem (True) or not (False).
     # This is e.g. the case for cloud execution.
     implies_no_shared_fs=False,
+    pass_default_storage_provider_args=True,
+    pass_default_resources_args=True,
+    pass_envvar_declarations_to_cmd=False,
+    auto_deploy_default_storage_provider=False,
 )
 
 
 # Required:
 # Implementation of your executor
 class Executor(RealExecutor):
-    def __init__(
-        self,
-        workflow: WorkflowExecutorInterface,
-        logger: LoggerExecutorInterface,
-    ):
-        super().__init__(
-            workflow,
-            logger,
-            # configure behavior of RemoteExecutor below
-            # whether arguments for setting the remote provider shall  be passed to jobs
-            pass_default_storage_provider_args=True,
-            # whether arguments for setting default resources shall be passed to jobs
-            pass_default_resources_args=True,
-            # whether environment variables shall be passed to jobs
-            pass_envvar_declarations_to_cmd=False,
-        )
+    def __post_init__(self):
         # These environment variables are set by SLURM.
         # only needed for commented out jobstep handling below
         self.jobid = os.getenv("SLURM_JOB_ID")
@@ -144,9 +131,6 @@ class Executor(RealExecutor):
 
     def get_python_executable(self):
         return sys.executable
-
-    def get_envvar_declarations(self):
-        return ""
 
     @property
     def cores(self):
