@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.1.3...v0.1.4) (2023-10-27)
+
+
+### Bug Fixes
+
+* adapt to changes in main branch of snakemake ([967095a](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/967095a05e1e82759608a9d9570714c6bb46c82b))
+
 ## [0.1.3](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.1.2...v0.1.3) (2023-09-21)
 
 
