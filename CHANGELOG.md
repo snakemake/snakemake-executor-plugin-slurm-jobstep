@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.1.6...v0.1.7) (2023-12-06)
+
+
+### Documentation
+
+* update author encoding ([bafb5f1](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/bafb5f1153ab66c35261572d17217803207c28f4))
+
 ## [0.1.6](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.1.5...v0.1.6) (2023-11-20)
 
 
