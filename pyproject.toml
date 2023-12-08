@@ -8,12 +8,15 @@ authors = [
     "Johannes Koester <johannes.koester@uni-due.de>",
 ]
 readme = "README.md"
+license = "MIT"
+repository = "https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep"
+documentation = "https://snakemake.github.io/snakemake-plugin-catalog/plugins/executor/slurm-jobstep.html"
+keywords = ["snakemake", "plugin", "executor", "cluster", "slurm"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
 snakemake-interface-common = "^1.13.0"
 snakemake-interface-executor-plugins = "^8.0.2"
-
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
