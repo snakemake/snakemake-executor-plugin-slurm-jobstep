@@ -124,6 +124,10 @@ class Executor(RemoteExecutor):
             else:
                 yield active_job
 
+    def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
+        for active_job in active_jobs:
+            active_job.aux["proc"].terminate()
+
     def cancel(self):
         pass
 
