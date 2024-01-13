@@ -110,7 +110,7 @@ class Executor(RemoteExecutor):
         job_info = SubmittedJobInfo(job, aux={"proc": proc})
 
         self.report_job_submission(job_info)
-    
+
     async def check_active_jobs(
         self, active_jobs: List[SubmittedJobInfo]
     ) -> Generator[SubmittedJobInfo, None, None]:
