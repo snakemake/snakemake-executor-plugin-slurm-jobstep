@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.10](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.1.9...v0.1.10) (2024-01-16)
+
+
+### Bug Fixes
+
+* fix group job execution ([#14](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/14)) ([a23e8f5](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/a23e8f5bfe53a6d0db93025761faa3d61b112865))
+
 ## [0.1.9](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.1.8...v0.1.9) (2024-01-13)
 
 
