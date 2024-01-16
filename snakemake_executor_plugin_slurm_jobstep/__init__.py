@@ -22,7 +22,7 @@ common_settings = CommonSettings(
     # (cluster, cloud, etc.). Only Snakemake's standard execution
     # plugins (snakemake-executor-plugin-dryrun, snakemake-executor-plugin-local)
     # are expected to specify False here.
-    non_local_exec=False,
+    non_local_exec=True,
     # Define whether your executor plugin implies that there is no shared
     # filesystem (True) or not (False).
     # This is e.g. the case for cloud execution.
@@ -111,6 +111,8 @@ class Executor(RealExecutor):
             # cpus per task and the number of CPU cores.
             call = f"srun -n1 --cpu-bind=q {self.format_job_exec(job)}"
 
+        self.logger.debug(job.is_group())
+        self.logger.debug(call)
         # this dict is to support the to be implemented feature of oversubscription in
         # "ordinary" group jobs.
         jobsteps[job] = subprocess.Popen(call, shell=True)
