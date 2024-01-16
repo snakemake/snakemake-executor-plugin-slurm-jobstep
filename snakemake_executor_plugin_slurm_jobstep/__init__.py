@@ -6,9 +6,8 @@ __license__ = "MIT"
 import os
 import subprocess
 import sys
-from typing import Generator, List
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
-from snakemake_interface_executor_plugins.executors.remote import RemoteExecutor
+from snakemake_interface_executor_plugins.executors.real import RealExecutor
 from snakemake_interface_executor_plugins.jobs import (
     JobExecutorInterface,
 )
@@ -23,7 +22,7 @@ common_settings = CommonSettings(
     # (cluster, cloud, etc.). Only Snakemake's standard execution
     # plugins (snakemake-executor-plugin-dryrun, snakemake-executor-plugin-local)
     # are expected to specify False here.
-    non_local_exec=False,
+    non_local_exec=True,
     # Define whether your executor plugin implies that there is no shared
     # filesystem (True) or not (False).
     # This is e.g. the case for cloud execution.
@@ -38,14 +37,22 @@ common_settings = CommonSettings(
 
 # Required:
 # Implementation of your executor
-class Executor(RemoteExecutor):
+class Executor(RealExecutor):
     def __post_init__(self):
         # These environment variables are set by SLURM.
         # only needed for commented out jobstep handling below
         self.jobid = os.getenv("SLURM_JOB_ID")
-        self.jobs = dict()
 
     def run_job(self, job: JobExecutorInterface):
+        # Implement here how to run a job.
+        # You can access the job's resources, etc.
+        # via the job object.
+        # After submitting the job, you have to call
+        # self.report_job_submission(job_info).
+        # with job_info being of type
+        # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
+
+        jobsteps = dict()
         # TODO revisit special handling for group job levels via srun at a later stage
         # if job.is_group():
 
@@ -104,29 +111,20 @@ class Executor(RemoteExecutor):
             # cpus per task and the number of CPU cores.
             call = f"srun -n1 --cpu-bind=q {self.format_job_exec(job)}"
 
+        self.logger.debug(job.is_group())
+        self.logger.debug(call)
         # this dict is to support the to be implemented feature of oversubscription in
         # "ordinary" group jobs.
-        proc = subprocess.Popen(call, shell=True)
-        job_info = SubmittedJobInfo(job, aux={"proc": proc})
+        jobsteps[job] = subprocess.Popen(call, shell=True)
 
+        job_info = SubmittedJobInfo(job)
         self.report_job_submission(job_info)
 
-    async def check_active_jobs(
-        self, active_jobs: List[SubmittedJobInfo]
-    ) -> Generator[SubmittedJobInfo, None, None]:
-        for active_job in active_jobs:
-            ret = active_job.aux["proc"].poll()
-            if ret is not None:
-                if ret != 0:
-                    self.report_job_error(active_job)
-                else:
-                    self.report_job_success(active_job)
-            else:
-                yield active_job
-
-    def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
-        for active_job in active_jobs:
-            active_job.aux["proc"].terminate()
+        # wait until all steps are finished
+        if any(proc.wait() != 0 for proc in jobsteps.values()):
+            self.report_job_error(job_info)
+        else:
+            self.report_job_success(job_info)
 
     def cancel(self):
         pass
