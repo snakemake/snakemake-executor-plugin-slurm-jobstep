@@ -1,5 +1,7 @@
 from typing import Optional
 import snakemake.common.tests
+from snakemake.common.tests.conftest import skip_on_windows
+from snakemake.common.tests import run, dpath
 from snakemake_interface_executor_plugins.settings import ExecutorSettingsBase
 
 
