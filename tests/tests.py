@@ -15,7 +15,6 @@ class TestWorkflowsBase(snakemake.common.tests.TestWorkflowsLocalStorageBase):
         # instatiate ExecutorSettings of this plugin as appropriate
         return None
 
-
-@skip_on_windows
-def test_issue_41():
-    run(dpath("test_github_issue41"))
+    @skip_on_windows
+    def test_issue_41(self):
+        run(dpath("test_github_issue41"))
