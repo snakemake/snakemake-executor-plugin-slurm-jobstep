@@ -122,7 +122,9 @@ class Executor(RealExecutor):
             # limit the number of cpus to the number of threads.
             cpus = min(self.cpus_per_task, job.threads)
 
-            call = f"srun -n1 --cpu-bind=q --cpus-per-task {cpus} {self.format_job_exec(job)}"
+            call = "srun -n1 --cpu-bind=q "
+            call += f"--cpus-per-task {cpus} "
+            call += f"{self.format_job_exec(job)}"
 
         self.logger.debug(job.is_group())
         self.logger.debug(call)
