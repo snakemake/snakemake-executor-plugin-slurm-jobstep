@@ -1,23 +1,26 @@
 [tool.poetry]
 name = "snakemake-executor-plugin-slurm-jobstep"
-version = "0.1.6"
+version = "0.1.10"
 description = "A Snakemake executor plugin for running srun jobs inside of SLURM jobs (meant for internal use by snakemake-executor-plugin-slurm)"
 authors = [
+    "Christian Meesters <meesters@uni-mainz.de>",
     "David Lähnemann <david.laehnemann@dkfz-heidelberg.de>",
     "Johannes Koester <johannes.koester@uni-due.de>",
-    "Christian Meesters <meesters@uni-mainz.de>",
 ]
 readme = "README.md"
+license = "MIT"
+repository = "https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep"
+documentation = "https://snakemake.github.io/snakemake-plugin-catalog/plugins/executor/slurm-jobstep.html"
+keywords = ["snakemake", "plugin", "executor", "cluster", "slurm"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
 snakemake-interface-common = "^1.13.0"
-snakemake-interface-executor-plugins = "^8.0.2"
-
+snakemake-interface-executor-plugins = "^8.2.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
-flake8 = "^6.1.0"
+flake8 = ">=6.1,<8.0"
 coverage = "^7.3.1"
 pytest = "^7.4.2"
 snakemake = {git = "https://github.com/snakemake/snakemake.git"}
