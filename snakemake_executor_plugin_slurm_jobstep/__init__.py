@@ -43,11 +43,6 @@ class Executor(RealExecutor):
         # These environment variables are set by SLURM.
         # only needed for commented out jobstep handling below
         self.jobid = os.getenv("SLURM_JOB_ID")
-        # as users are not compelled to set this parameter
-        # we need to check it here.
-        if os.getenv("SLURM_CPUS_PER_TASK") is None:
-            raise WorkflowError("SLURM_CPUS_PER_TASK not set.")
-        self.cpus_per_task = int(os.getenv("SLURM_CPUS_PER_TASK"))
 
     def run_job(self, job: JobExecutorInterface):
         # Implement here how to run a job.
@@ -120,7 +115,7 @@ class Executor(RealExecutor):
             # the job can utilize the c-group's resources.
             # Note, if a job asks for more threads than cpus_per_task, we need to
             # limit the number of cpus to the number of threads.
-            cpus = min(self.cpus_per_task, job.threads)
+            cpus = min(job.resources.get("cpus_per_task", 1), job.threads)
 
             call = "srun -n1 --cpu-bind=q "
             call += f"--cpus-per-task {cpus} "
