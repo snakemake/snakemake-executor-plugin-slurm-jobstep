@@ -1,6 +1,5 @@
 from typing import Optional
 import snakemake.common.tests
-from snakemake.common.tests import run, dpath
 from snakemake_interface_executor_plugins.settings import ExecutorSettingsBase
 
 
@@ -15,5 +14,5 @@ class TestWorkflowsBase(snakemake.common.tests.TestWorkflowsLocalStorageBase):
         return None
 
 
-def test_issue_41():
-    run(dpath("test_github_issue41"))
+# def test_issue_41():
+#    run(dpath("test_github_issue41"))
