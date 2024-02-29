@@ -12,3 +12,7 @@ class TestWorkflowsBase(snakemake.common.tests.TestWorkflowsLocalStorageBase):
     def get_executor_settings(self) -> Optional[ExecutorSettingsBase]:
         # instatiate ExecutorSettings of this plugin as appropriate
         return None
+
+
+def test_issue_41():
+    run(dpath("test_github_issue41"))

@@ -6,6 +6,7 @@ __license__ = "MIT"
 import os
 import subprocess
 import sys
+from snakemake.exceptions import WorkflowError
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
 from snakemake_interface_executor_plugins.executors.real import RealExecutor
 from snakemake_interface_executor_plugins.jobs import (
@@ -42,6 +43,11 @@ class Executor(RealExecutor):
         # These environment variables are set by SLURM.
         # only needed for commented out jobstep handling below
         self.jobid = os.getenv("SLURM_JOB_ID")
+        # as users are not compelled to set this parameter
+        # we need to check it here.
+        if os.getenv("SLURM_CPUS_PER_TASK") is None:
+            raise WorkflowError("SLURM_CPUS_PER_TASK not set.")
+        self.cpus_per_task = int(os.getenv("SLURM_CPUS_PER_TASK"))
 
     def run_job(self, job: JobExecutorInterface):
         # Implement here how to run a job.
@@ -109,7 +115,14 @@ class Executor(RealExecutor):
             # The -n1 is important to avoid that srun executes the given command
             # multiple times, depending on the relation between
             # cpus per task and the number of CPU cores.
-            call = f"srun -n1 --cpu-bind=q {self.format_job_exec(job)}"
+
+            # as of v22.11.0, the --cpu-per-task flag is needed to ensure that
+            # the job can utilize the c-group's resources.
+            # Note, if a job asks for more threads than cpus_per_task, we need to
+            # limit the number of cpus to the number of threads.
+            cpus = min(self.cpus_per_task, job.threads)
+
+            call = f"srun -n1 --cpu-bind=q --cpus-per-task {cpus} {self.format_job_exec(job)}"
 
         # this dict is to support the to be implemented feature of oversubscription in
         # "ordinary" group jobs.
