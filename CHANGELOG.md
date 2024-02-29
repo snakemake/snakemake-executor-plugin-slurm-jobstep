@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.1.10](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.1.9...v0.1.10) (2024-01-16)
+
+
+### Bug Fixes
+
+* fix group job execution ([#14](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/14)) ([a23e8f5](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/a23e8f5bfe53a6d0db93025761faa3d61b112865))
+
+## [0.1.9](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.1.8...v0.1.9) (2024-01-13)
+
+
+### Bug Fixes
+
+* fix parallelism in case of group jobs ([#12](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/12)) ([6c06d14](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/6c06d14078d1c9a1e002b1d9643fc9d3a9c056d1))
+
+## [0.1.8](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.1.7...v0.1.8) (2023-12-08)
+
+
+### Documentation
+
+* update metadata ([903b2ea](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/903b2eaf89f3091d47f981250fe759aa976de3cb))
+
+## [0.1.7](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.1.6...v0.1.7) (2023-12-06)
+
+
+### Documentation
+
+* update author encoding ([bafb5f1](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/bafb5f1153ab66c35261572d17217803207c28f4))
+
 ## [0.1.6](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.1.5...v0.1.6) (2023-11-20)
 
 
