@@ -6,7 +6,6 @@ __license__ = "MIT"
 import os
 import subprocess
 import sys
-from snakemake.exceptions import WorkflowError
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
 from snakemake_interface_executor_plugins.executors.real import RealExecutor
 from snakemake_interface_executor_plugins.jobs import (
