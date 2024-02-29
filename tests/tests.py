@@ -14,5 +14,6 @@ class TestWorkflowsBase(snakemake.common.tests.TestWorkflowsLocalStorageBase):
         return None
 
 
+@skip_on_windows
 def test_issue_41():
     run(dpath("test_github_issue41"))
