@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.1.10...v0.1.11) (2024-03-11)
+
+
+### Bug Fixes
+
+* avoid redundant steps related to shared fs usage ([#19](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/19)) ([a3379bb](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/a3379bb76933703f77fae13d2a850eef053bc396))
+
 ## [0.1.10](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.1.9...v0.1.10) (2024-01-16)
 
 
