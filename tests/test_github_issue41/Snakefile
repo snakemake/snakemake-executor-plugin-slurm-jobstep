@@ -1,0 +1,10 @@
+rule all:
+     input: "1.out"
+
+rule test1:
+     output: "1.out"
+     #threads: 2
+     resources:
+        cpus_per_task=1
+     shell: "touch $SLURM_CPUS_PER_TASK.out"
+

@@ -110,7 +110,16 @@ class Executor(RealExecutor):
             # The -n1 is important to avoid that srun executes the given command
             # multiple times, depending on the relation between
             # cpus per task and the number of CPU cores.
-            call = f"srun -n1 --cpu-bind=q {self.format_job_exec(job)}"
+
+            # as of v22.11.0, the --cpu-per-task flag is needed to ensure that
+            # the job can utilize the c-group's resources.
+            # Note, if a job asks for more threads than cpus_per_task, we need to
+            # limit the number of cpus to the number of threads.
+            cpus = min(job.resources.get("cpus_per_task", 1), job.threads)
+
+            call = "srun -n1 --cpu-bind=q "
+            call += f"--cpus-per-task {cpus} "
+            call += f"{self.format_job_exec(job)}"
 
         self.logger.debug(job.is_group())
         self.logger.debug(call)
