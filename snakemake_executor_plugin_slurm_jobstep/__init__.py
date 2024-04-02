@@ -4,6 +4,7 @@ __email__ = "johannes.koester@uni-due.de"
 __license__ = "MIT"
 
 import os
+import socket
 import subprocess
 import sys
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
@@ -112,8 +113,9 @@ class Executor(RealExecutor):
             # cpus per task and the number of CPU cores.
             call = f"srun -n1 --cpu-bind=q {self.format_job_exec(job)}"
 
-        self.logger.debug(job.is_group())
-        self.logger.debug(call)
+        self.logger.debug(f"This job is a group job: {job.is_group()}")
+        self.logger.debug(f"The call for this job is: {call}")
+        self.logger.debug(f"Job is running on host: {socket.gethostname()}")
         # this dict is to support the to be implemented feature of oversubscription in
         # "ordinary" group jobs.
         jobsteps[job] = subprocess.Popen(call, shell=True)
