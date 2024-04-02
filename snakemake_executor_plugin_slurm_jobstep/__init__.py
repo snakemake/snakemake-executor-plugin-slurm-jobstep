@@ -112,12 +112,11 @@ class Executor(RealExecutor):
 
             # as of v22.11.0, the --cpu-per-task flag is needed to ensure that
             # the job can utilize the c-group's resources.
-            # Note, if a job asks for more threads than cpus_per_task, we need to
-            # limit the number of cpus to the number of threads.
-            cpus = min(job.resources.get("cpus_per_task", 1), job.threads)
+            # We set the limitation accordingly, assuming the submit executor
+            # has set the resources correctly.
 
             call = "srun -n1 --cpu-bind=q "
-            call += f"--cpus-per-task {cpus} "
+            call += f"--cpus-per-task {job.resources.cpus_per_task} "
             call += f"{self.format_job_exec(job)}"
 
         self.logger.debug(job.is_group())
