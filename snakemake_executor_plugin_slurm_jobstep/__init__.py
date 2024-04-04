@@ -6,6 +6,7 @@ __license__ = "MIT"
 import os
 import subprocess
 import sys
+from snakemake.common.tbdstring import TBDString
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
 from snakemake_interface_executor_plugins.executors.real import RealExecutor
 from snakemake_interface_executor_plugins.jobs import (
@@ -53,47 +54,54 @@ class Executor(RealExecutor):
         # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
 
         jobsteps = dict()
-        # TODO revisit special handling for group job levels via srun at a later stage
-        # if job.is_group():
 
-        #     def get_call(level_job, aux=""):
-        #         # we need this calculation, because of srun's greediness and
-        #         # SLURM's limits: it is not able to limit the memory if we divide the
-        #         # job per CPU by itself.
+        if job.is_group():
 
-        #         level_mem = level_job.resources.get("mem_mb")
-        #         if isinstance(level_mem, TBDString):
-        #             level_mem = 100
+            def get_call(level_job, aux=""):
+                # we need this calculation, because of srun's greediness and
+                # SLURM's limits: it is not able to limit the memory if we divide the
+                # job per CPU by itself.
 
-        #         mem_per_cpu = max(level_mem // level_job.threads, 100)
-        #         exec_job = self.format_job_exec(level_job)
+                level_mem = level_job.resources.get("mem_mb")
+                if isinstance(level_mem, TBDString):
+                    level_mem = 100  # default value
+                    self.logger.warning(
+                        "'mem_mb' not set for job, using default value of 100MB"
+                    )
 
-        #         # Note: The '--exlusive' flag is a prevention for triggered job steps
-        #         #       within an allocation to oversubscribe within a given c-group.
-        #         #       As we are dealing only with smp software
-        #         #       the '--ntasks' is explicitly set to 1 by '-n1' per group job
-        #         #       (step).
-        #         return (
-        #             f"srun -J {job.groupid} --jobid {self.jobid}"
-        #             f" --mem-per-cpu {mem_per_cpu} -c {level_job.threads}"
-        #             f" --exclusive -n 1 {aux} {exec_job}"
-        #         )
+                mem_per_cpu = max(level_mem // level_job.threads, 100)
+                exec_job = self.format_job_exec(level_job)
 
-        #     for level in list(job.toposorted):
-        #         # we need to ensure order - any:
-        #         level_list = list(level)
-        #         for level_job in level_list[:-1]:
-        #             jobsteps[level_job] = subprocess.Popen(
-        #                 get_call(level_job), shell=True
-        #             )
-        #         # now: the last one
-        #         # this way, we ensure that level jobs depending on the current level
-        #         # get started
-        #         jobsteps[level_list[-1]] = subprocess.Popen(
-        #             get_call(level_list[-1], aux="--dependency=singleton"), shell=True
-        #         )
+                # Note: The '--exlusive' flag is a prevention for triggered job steps
+                #       within an allocation to oversubscribe within a given c-group.
+                #       As we are dealing only with smp software
+                #       the '--ntasks' is explicitly set to 1 by '-n1' per group job
+                #       (step).
+                return (
+                    f"srun -J {job.groupid} --jobid {self.jobid}"
+                    f" --mem-per-cpu {mem_per_cpu} -c {level_job.threads}"
+                    f" --exclusive -n 1 {aux} {exec_job}"
+                )
 
-        if "mpi" in job.resources.keys():
+            for level in list(job.toposorted):
+                # we need to ensure order - any:
+                level_list = list(level)
+                print(f"Level list: {level_list}")
+                for level_job in level_list[:-1]:
+                    print(f"Level job: {level_job}")
+                    self.logger.debug(f"Triggering group job step: {level_job}")
+                    jobsteps[level_job] = subprocess.Popen(
+                        get_call(level_job), shell=True
+                    )
+                # now: the last one
+                # this way, we ensure that level jobs depending on the current level
+                # get started
+                print(f"Last Level job: {level_list[-1]}")
+                self.logger.debug(f"Triggering last group job step: {level_list[-1]}")
+                jobsteps[level_list[-1]] = subprocess.Popen(
+                    get_call(level_list[-1], aux="--dependency=singleton"), shell=True
+                )
+        elif "mpi" in job.resources.keys():
             # MPI job:
             # No need to prepend `srun`, as this will happen inside of the job's shell
             # command or script (!).
@@ -119,11 +127,9 @@ class Executor(RealExecutor):
             call += f"--cpus-per-task {job.resources.get('cpus_per_task')} "
             call += f"{self.format_job_exec(job)}"
 
-        self.logger.debug(job.is_group())
-        self.logger.debug(call)
-        # this dict is to support the to be implemented feature of oversubscription in
-        # "ordinary" group jobs.
-        jobsteps[job] = subprocess.Popen(call, shell=True)
+            self.logger.debug(f"The call to srun is: {call}")
+
+            jobsteps[job] = subprocess.Popen(call, shell=True)
 
         job_info = SubmittedJobInfo(job)
         self.report_job_submission(job_info)
