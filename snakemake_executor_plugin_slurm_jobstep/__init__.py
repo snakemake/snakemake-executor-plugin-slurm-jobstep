@@ -116,7 +116,7 @@ class Executor(RealExecutor):
             # has set the resources correctly.
 
             call = "srun -n1 --cpu-bind=q "
-            call += f"--cpus-per-task {job.resources.cpus_per_task} "
+            call += f"--cpus-per-task {job.resources.get('cpus_per_task')} "
             call += f"{self.format_job_exec(job)}"
 
         self.logger.debug(job.is_group())
