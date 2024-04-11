@@ -12,6 +12,7 @@ from snakemake_interface_executor_plugins.jobs import (
     JobExecutorInterface,
 )
 from snakemake_interface_executor_plugins.settings import ExecMode, CommonSettings
+from snakemake_interface_common.exceptions import WorkflowError
 
 
 # Required:
@@ -116,7 +117,7 @@ class Executor(RealExecutor):
             # has set the resources correctly.
 
             call = "srun -n1 --cpu-bind=q "
-            call += f"--cpus-per-task {job.resources.get('cpus_per_task')} "
+            call += f"--cpus-per-task {get_cpus_per_task(job)} "
             call += f"{self.format_job_exec(job)}"
 
         self.logger.debug(job.is_group())
@@ -149,3 +150,16 @@ class Executor(RealExecutor):
 
     def get_exec_mode(self) -> ExecMode:
         return ExecMode.REMOTE
+
+
+def get_cpus_per_task(job: JobExecutorInterface):
+    cpus_per_task = job.threads
+    if job.resources.get("cpus_per_task"):
+        if not isinstance(cpus_per_task, int):
+            raise WorkflowError(
+                f"cpus_per_task must be an integer, but is {cpus_per_task}"
+            )
+        cpus_per_task = job.resources.cpus_per_task
+    # ensure that at least 1 cpu is requested
+    # because 0 is not allowed by slurm
+    return max(1, cpus_per_task)
