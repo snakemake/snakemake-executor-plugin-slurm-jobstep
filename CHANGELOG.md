@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.2.0...v0.2.1) (2024-04-11)
+
+
+### Bug Fixes
+
+* cgroup confinement ([#23](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/23)) ([f8a0bfc](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/f8a0bfc3d44ff818a99b3f935c58360f485def97))
+
 ## [0.2.0](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.1.11...v0.2.0) (2024-04-06)
 
 
