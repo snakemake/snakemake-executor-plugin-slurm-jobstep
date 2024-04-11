@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "snakemake-executor-plugin-slurm-jobstep"
-version = "0.1.10"
+version = "0.2.0"
 description = "A Snakemake executor plugin for running srun jobs inside of SLURM jobs (meant for internal use by snakemake-executor-plugin-slurm)"
 authors = [
     "Christian Meesters <meesters@uni-mainz.de>",
@@ -16,7 +16,7 @@ keywords = ["snakemake", "plugin", "executor", "cluster", "slurm"]
 [tool.poetry.dependencies]
 python = "^3.11"
 snakemake-interface-common = "^1.13.0"
-snakemake-interface-executor-plugins = "^8.2.0"
+snakemake-interface-executor-plugins = "^9.0.0"
 
 [tool.poetry.group.dev.dependencies]
 black = ">=23.7,<25.0"
