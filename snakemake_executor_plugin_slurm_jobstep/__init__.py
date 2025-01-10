@@ -155,14 +155,26 @@ class Executor(RealExecutor):
         return ExecMode.REMOTE
 
 
-def get_cpus_per_task(job: JobExecutorInterface):
-    cpus_per_task = job.threads
+def get_cpus_per_task(job: JobExecutorInterface, gpu: bool) -> str:
+    cpus_per_task = cpus_per_gpu = job.threads
     if job.resources.get("cpus_per_task"):
+        cpus_per_task = job.resources.cpus_per_task
         if not isinstance(cpus_per_task, int):
             raise WorkflowError(
                 f"cpus_per_task must be an integer, but is {cpus_per_task}"
             )
-        cpus_per_task = job.resources.cpus_per_task
-    # ensure that at least 1 cpu is requested
-    # because 0 is not allowed by slurm
-    return max(1, cpus_per_task)
+        # ensure that at least 1 cpu is requested
+        # because 0 is not allowed by slurm
+        cpus_per_task = max(1, job.resources.cpus_per_task)
+        cpu_string = f"--cpus-per-task={cpus_per_task}"
+    elif gpu and job.resources.get("cpus_per_gpu"):
+        cpus_per_gpu = job.resources.cpus_per_gpu
+        if not isinstance(cpus_per_gpu, int):
+            raise WorkflowError(
+                f"cpus_per_gpu must be an integer, but is {cpus_per_gpu}"
+            )
+        # ensure that at least 1 cpu is requested
+        # because 0 is not allowed by slurm
+        cpus_per_gpu = max(1, job.resources.cpus_per_gpu)
+        cpu_string = f"--cpus-per-gpu={cpus_per_gpu}"
+    return cpu_string
