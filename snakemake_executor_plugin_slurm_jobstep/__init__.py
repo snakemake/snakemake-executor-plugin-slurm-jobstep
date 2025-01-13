@@ -45,6 +45,8 @@ class Executor(RealExecutor):
         # These environment variables are set by SLURM.
         # only needed for commented out jobstep handling below
         self.jobid = os.getenv("SLURM_JOB_ID")
+        # we consider this job to be a GPU job, if a GPU has been reserved
+        self.gpu_job = os.getenv("SLURM_GPUS")
 
     def run_job(self, job: JobExecutorInterface):
         # Implement here how to run a job.
@@ -92,16 +94,12 @@ class Executor(RealExecutor):
         #         # now: the last one
         #         # this way, we ensure that level jobs depending on the current level
         #         # get started
-        #         jobsteps[level_list[-1]] = subprocess.Popen(
-        #             get_call(level_list[-1], aux="--dependency=singleton"), shell=True
-        #         )
-
         if "mpi" in job.resources.keys():
             # MPI job:
             # No need to prepend `srun`, as this will happen inside of the job's shell
             # command or script (!).
             # The following call invokes snakemake, which in turn takes care of all
-            # auxilliary work around the actual command
+            # auxiliary work around the actual command
             # like remote file support, benchmark setup, error handling, etc.
             # AND there can be stuff around the srun call within the job, like any
             # commands which should be executed before.
@@ -119,8 +117,8 @@ class Executor(RealExecutor):
             # has set the resources correctly.
 
             call = "srun -n1 --cpu-bind=q "
-            call += f"--cpus-per-task {get_cpus_per_task(job)} "
-            call += f"{self.format_job_exec(job)}"
+            call += f" {get_cpu_setting(job, self.gpu_job)} "
+            call += f" {self.format_job_exec(job)}"
 
         self.logger.debug(f"This job is a group job: {job.is_group()}")
         self.logger.debug(f"The call for this job is: {call}")
@@ -155,7 +153,7 @@ class Executor(RealExecutor):
         return ExecMode.REMOTE
 
 
-def get_cpus_per_task(job: JobExecutorInterface, gpu: bool) -> str:
+def get_cpu_setting(job: JobExecutorInterface, gpu: bool) -> str:
     cpus_per_task = cpus_per_gpu = job.threads
     if job.resources.get("cpus_per_task"):
         cpus_per_task = job.resources.cpus_per_task
@@ -163,18 +161,27 @@ def get_cpus_per_task(job: JobExecutorInterface, gpu: bool) -> str:
             raise WorkflowError(
                 f"cpus_per_task must be an integer, but is {cpus_per_task}"
             )
+        # If explicetily set to < 0, return an empty string
+        # some clusters do not allow CPU settings (e.g. in GPU partitions).
+        if cpus_per_task < 0:
+            return ""
         # ensure that at least 1 cpu is requested
         # because 0 is not allowed by slurm
         cpus_per_task = max(1, job.resources.cpus_per_task)
-        cpu_string = f"--cpus-per-task={cpus_per_task}"
+        return f"--cpus-per-task={cpus_per_task}"
     elif gpu and job.resources.get("cpus_per_gpu"):
         cpus_per_gpu = job.resources.cpus_per_gpu
         if not isinstance(cpus_per_gpu, int):
             raise WorkflowError(
                 f"cpus_per_gpu must be an integer, but is {cpus_per_gpu}"
             )
+        # If explicetily set to < 0, return an empty string
+        # some clusters do not allow CPU settings (e.g. in GPU partitions).
+        if cpus_per_gpu < 0:
+            return ""
         # ensure that at least 1 cpu is requested
         # because 0 is not allowed by slurm
         cpus_per_gpu = max(1, job.resources.cpus_per_gpu)
-        cpu_string = f"--cpus-per-gpu={cpus_per_gpu}"
-    return cpu_string
+        return f"--cpus-per-gpu={cpus_per_gpu}"
+    else:
+        return f"--cpus-per-task={cpus_per_task}"
