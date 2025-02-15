@@ -154,7 +154,11 @@ class Executor(RealExecutor):
 
 
 def get_cpu_setting(job: JobExecutorInterface, gpu: bool) -> str:
+    # per default, we assume that Snakemake's threads are the same as the 
+    # cpus per task or per gpu. If the user has set the cpus_per_task or 
+    # cpus_per_gpu explicitly, we use these values.
     cpus_per_task = cpus_per_gpu = job.threads
+    # cpus_per_task and cpus_per_gpu are mutually exclusive
     if job.resources.get("cpus_per_task"):
         cpus_per_task = job.resources.cpus_per_task
         if not isinstance(cpus_per_task, int):
@@ -177,11 +181,9 @@ def get_cpu_setting(job: JobExecutorInterface, gpu: bool) -> str:
             )
         # If explicetily set to < 0, return an empty string
         # some clusters do not allow CPU settings (e.g. in GPU partitions).
+        # Currently, 0 is not allowed by SLURM.
         if cpus_per_gpu <= 0:
             return ""
-        # ensure that at least 1 cpu is requested
-        # because 0 is not allowed by slurm
-        cpus_per_gpu = max(1, job.resources.cpus_per_gpu)
         return f"--cpus-per-gpu={cpus_per_gpu}"
     else:
         return f"--cpus-per-task={cpus_per_task}"
