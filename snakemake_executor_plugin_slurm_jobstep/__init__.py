@@ -154,8 +154,8 @@ class Executor(RealExecutor):
 
 
 def get_cpu_setting(job: JobExecutorInterface, gpu: bool) -> str:
-    # per default, we assume that Snakemake's threads are the same as the 
-    # cpus per task or per gpu. If the user has set the cpus_per_task or 
+    # per default, we assume that Snakemake's threads are the same as the
+    # cpus per task or per gpu. If the user has set the cpus_per_task or
     # cpus_per_gpu explicitly, we use these values.
     cpus_per_task = cpus_per_gpu = job.threads
     # cpus_per_task and cpus_per_gpu are mutually exclusive
