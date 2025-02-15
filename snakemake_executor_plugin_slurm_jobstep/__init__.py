@@ -177,7 +177,7 @@ def get_cpu_setting(job: JobExecutorInterface, gpu: bool) -> str:
             )
         # If explicetily set to < 0, return an empty string
         # some clusters do not allow CPU settings (e.g. in GPU partitions).
-        if cpus_per_gpu < 0:
+        if cpus_per_gpu <= 0:
             return ""
         # ensure that at least 1 cpu is requested
         # because 0 is not allowed by slurm
