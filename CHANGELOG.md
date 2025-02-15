@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.2.1...v0.3.0) (2025-02-15)
+
+
+### Features
+
+* cpu-function altered to support cpus-per-gpu, too ([#28](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/28)) ([30fecc3](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/30fecc3f96b238ad5a4cfdc82d55b5490b8b1524))
+
+
+### Bug Fixes
+
+* gres ([#31](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/31)) ([bfa338e](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/bfa338ed2e226db9980d954a0aef6c0518daa6fe))
+
 ## [0.2.1](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.2.0...v0.2.1) (2024-04-11)
 
 
