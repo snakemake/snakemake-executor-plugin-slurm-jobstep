@@ -7,6 +7,7 @@ import os
 import socket
 import subprocess
 import sys
+from packaging import version
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
 from snakemake_interface_executor_plugins.executors.real import RealExecutor
 from snakemake_interface_executor_plugins.jobs import (
@@ -115,8 +116,18 @@ class Executor(RealExecutor):
             # the job can utilize the c-group's resources.
             # We set the limitation accordingly, assuming the submit executor
             # has set the resources correctly.
-
-            call = "srun -n1 --cpu-bind=q "
+            min_slurm_version = version.parse("17.11.0")
+            slurm_version = version.parse(
+                subprocess.run(["srun", "-V"], stdout=subprocess.PIPE)
+                .stdout.decode()
+                .split()[1]
+            )
+            # Fix 'srun: unrecognized option "--cpu-bind=q"' error for SLURM
+            # versions 17.11.0 and prior
+            cpu_bind_arg = "--cpu-bind"
+            if slurm_version < min_slurm_version:
+                cpu_bind_arg = "--cpu_bind"
+            call = f"srun -n1 {cpu_bind_arg}=q"
             call += f" {get_cpu_setting(job, self.gpu_job)} "
             call += f" {self.format_job_exec(job)}"
 
