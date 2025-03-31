@@ -15,15 +15,15 @@ keywords = ["snakemake", "plugin", "executor", "cluster", "slurm"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-snakemake-interface-common = "^1.13.0"
-snakemake-interface-executor-plugins = "^9.0.0"
+snakemake-interface-common = "^1.17.4"
+snakemake-interface-executor-plugins = "^9.3.2"
 
 [tool.poetry.group.dev.dependencies]
 black = ">=23.7,<26.0"
 flake8 = ">=6.1,<8.0"
 coverage = "^7.3.1"
 pytest = ">=7.4.2,<9.0.0"
-snakemake = "^8.20.1"
+snakemake = "^9.1.1"
 
 [tool.coverage.run]
 omit = [".*", "*/site-packages/*", "Snakefile"]
