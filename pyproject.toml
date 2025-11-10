@@ -22,7 +22,7 @@ snakemake-interface-executor-plugins = "^9.3.2"
 black = ">=23.7,<26.0"
 flake8 = ">=6.1,<8.0"
 coverage = "^7.3.1"
-pytest = ">=7.4.2,<9.0.0"
+pytest = ">=7.4.2,<10.0.0"
 snakemake = "^9.1.1"
 
 [tool.coverage.run]
