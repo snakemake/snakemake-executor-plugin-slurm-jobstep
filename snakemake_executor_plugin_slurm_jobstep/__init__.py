@@ -163,9 +163,20 @@ class Executor(RealExecutor):
             call, shell=True, text=True, stdin=subprocess.PIPE
         )
         if srun_script is not None:
-            # pass the srun bash script via stdin
-            jobsteps[job].stdin.write(srun_script)
-            jobsteps[job].stdin.close()
+            try:
+                # pass the srun bash script via stdin
+                jobsteps[job].stdin.write(srun_script)
+                jobsteps[job].stdin.close()
+            except BrokenPipeError:
+                # subprocess terminated before reading stdin
+                self.logger.error(
+                    f"Failed to write script to stdin for job {job}. "
+                    "Subprocess may have terminated prematurely."
+                )
+                self.report_job_error(SubmittedJobInfo(job))
+                raise WorkflowError(
+                    f"Job {job} failed: subprocess terminated before reading script"
+                )
 
         job_info = SubmittedJobInfo(job)
         self.report_job_submission(job_info)
