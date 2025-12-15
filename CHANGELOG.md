@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.3.0...v0.4.0) (2025-12-15)
+
+
+### Features
+
+* pass a bash script to srun rather than the command directly ([#37](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/37)) ([46b39e7](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/46b39e7f8f4a7ed49d436fd487ff294f206392ba))
+
 ## [0.3.0](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.2.1...v0.3.0) (2025-02-15)
 
 
