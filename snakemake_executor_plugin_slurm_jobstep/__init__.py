@@ -7,6 +7,10 @@ import os
 import socket
 import subprocess
 import sys
+import json
+import ast
+import re
+import zlib
 from dataclasses import dataclass, field
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
 from snakemake_interface_executor_plugins.executors.real import RealExecutor
@@ -54,12 +58,24 @@ class ExecutorSettings(ExecutorSettingsBase):
                 "Pass to srun the command to be executed as a shell script "
                 "(fed through stdin) instead of wrapping it in the command line "
                 "call. Useful when a limit exists on SLURM command line length (ie. "
-                "max_submit_line_size)."
+                "max_submit_line_size). (internal use only)"
             ),
             "env_var": False,
             "required": False,
         },
     )
+    array_execs: str = field(
+        default=False,
+        metadata={
+            "help": (
+                "When a job array is used, this flag, will receive all job excec "
+                "strings as a json dict. (internal use only)"
+            ),
+            "env_var": False,
+            "required": False,
+        },
+    )
+
 
 
 # Required:
@@ -71,6 +87,8 @@ class Executor(RealExecutor):
         self.jobid = os.getenv("SLURM_JOB_ID")
         # we consider this job to be a GPU job, if a GPU has been reserved
         self.gpu_job = os.getenv("SLURM_GPUS")
+        # check if SLURM_ARRAY_TASK_ID is set, to determine whether this is a job array task
+        self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None   
 
     def run_job(self, job: JobExecutorInterface):
         # Implement here how to run a job.
@@ -82,6 +100,7 @@ class Executor(RealExecutor):
         # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
 
         jobsteps = dict()
+        call = None
         srun_script = None
         # TODO revisit special handling for group job levels via srun at a later stage
         # if job.is_group():
@@ -129,6 +148,29 @@ class Executor(RealExecutor):
             # AND there can be stuff around the srun call within the job, like any
             # commands which should be executed before.
             call = self.format_job_exec(job)
+        # this is an array job
+        elif self.job_array_task and self.workflow.executor_settings.array_execs:
+            array_index = int(os.getenv("SLURM_ARRAY_TASK_ID"))
+            if array_index == 1:
+                # in this case we need to pass the exec strings of
+                # as for a single job, but with the extracted 
+                # --slurm-jobstep-arrays-execs flag
+                call = self.format_job_exec(job)
+                index = call.find("--slurm-jobstep-array-execs")
+                if index != -1:
+                    call = call[:index]
+                self.logger.debug(f"Handling first job array task with index {array_index}")
+                self.logger.debug(f"Raw call for first array index: {call}")
+            else:
+                self.logger.debug(f"Handling job array task with index {array_index}")
+                self.logger.debug(f"Raw array execs: {self.workflow.executor_settings.array_execs}") 
+                self.logger.debug(f"type of raw array execs: {type(self.workflow.executor_settings.array_execs)} ")
+                # extract the exec string from the passed json dict:
+                array_execs = parse_array_execs(self.workflow.executor_settings.array_execs)
+                compressed_hex = array_execs[str(array_index)]
+                compressed_bytes = bytes.fromhex(compressed_hex)
+                call = zlib.decompress(compressed_bytes).decode("utf-8")
+                self.logger.debug(f"Decompressed call for array index {array_index}: {call}")
         else:
             # SMP job, execute snakemake with srun, to ensure proper placing of threaded
             # executables within the c-group
@@ -238,3 +280,88 @@ def get_cpu_setting(job: JobExecutorInterface, gpu: bool) -> str:
         return f"--cpus-per-gpu={cpus_per_gpu}"
     else:
         return f"--cpus-per-task={cpus_per_task}"
+
+
+def parse_array_execs(raw_array_execs):
+    """Parse array exec mapping from executor settings.
+
+    Accepts strict JSON and Python literal dict strings for compatibility with
+    shell/CLI forwarding that may rewrite quotes.
+    """
+    if isinstance(raw_array_execs, dict):
+        parsed = raw_array_execs
+
+    elif not isinstance(raw_array_execs, str):
+        raise WorkflowError(
+            "Invalid value for executor setting `array_execs`: expected str or dict."
+        )
+    else:
+        try:
+            parsed = json.loads(raw_array_execs)
+        except json.JSONDecodeError:
+            try:
+                parsed = ast.literal_eval(raw_array_execs)
+            except (SyntaxError, ValueError):
+                parsed = _parse_compact_array_execs(raw_array_execs)
+                if parsed is None:
+                    raise WorkflowError(
+                        "Failed to parse executor setting `array_execs`. "
+                        "Expected JSON, Python dict literal, or compact mapping."
+                    ) from None
+
+    if not isinstance(parsed, dict):
+        raise WorkflowError(
+            "Invalid value for executor setting `array_execs`: expected mapping."
+        )
+
+    normalized = {}
+    for key, value in parsed.items():
+        key_str = str(key).strip()
+        if not key_str:
+            raise WorkflowError(
+                "Invalid value for executor setting `array_execs`: empty task id key."
+            )
+
+        if not isinstance(value, str):
+            value = str(value)
+        value = value.strip()
+        if not value or not re.fullmatch(r"[0-9a-fA-F]+", value):
+            raise WorkflowError(
+                "Invalid value for executor setting `array_execs`: values must be "
+                "hex-encoded strings."
+            )
+        normalized[key_str] = value
+
+    return normalized
+
+
+def _parse_compact_array_execs(raw_array_execs: str):
+    """Parse compact dict-like mapping with bare hex values.
+
+    Expected shape: {2: a0ff..., 3: b19e...}
+    """
+    text = raw_array_execs.strip()
+    if not (text.startswith("{") and text.endswith("}")):
+        return None
+
+    inner = text[1:-1]
+    if not inner.strip():
+        return {}
+
+    pair_pattern = re.compile(r"\s*([0-9]+)\s*:\s*([0-9a-fA-F]+)\s*(?:,|$)")
+    parsed = {}
+    position = 0
+    while position < len(inner):
+        while position < len(inner) and inner[position].isspace():
+            position += 1
+        if position >= len(inner):
+            break
+
+        match = pair_pattern.match(inner, position)
+        if match is None:
+            return None
+
+        parsed[match.group(1)] = match.group(2)
+        position = match.end()
+
+    return parsed
