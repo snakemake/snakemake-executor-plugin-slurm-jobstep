@@ -164,7 +164,6 @@ class Executor(RealExecutor):
             else:
                 self.logger.debug(f"Handling job array task with index {array_index}")
                 self.logger.debug(f"Raw array execs: {self.workflow.executor_settings.array_execs}") 
-                self.logger.debug(f"type of raw array execs: {type(self.workflow.executor_settings.array_execs)} ")
                 # extract the exec string from the passed json dict:
                 array_execs = parse_array_execs(self.workflow.executor_settings.array_execs)
                 compressed_hex = array_execs[str(array_index)]
