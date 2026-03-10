@@ -77,7 +77,6 @@ class ExecutorSettings(ExecutorSettingsBase):
     )
 
 
-
 # Required:
 # Implementation of your executor
 class Executor(RealExecutor):
@@ -88,7 +87,7 @@ class Executor(RealExecutor):
         # we consider this job to be a GPU job, if a GPU has been reserved
         self.gpu_job = os.getenv("SLURM_GPUS")
         # check if SLURM_ARRAY_TASK_ID is set, to determine whether this is a job array task
-        self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None   
+        self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
 
     def run_job(self, job: JobExecutorInterface):
         # Implement here how to run a job.
@@ -153,24 +152,34 @@ class Executor(RealExecutor):
             array_index = int(os.getenv("SLURM_ARRAY_TASK_ID"))
             if array_index == 1:
                 # in this case we need to pass the exec strings of
-                # as for a single job, but with the extracted 
+                # as for a single job, but with the extracted
                 # --slurm-jobstep-arrays-execs flag
                 call = self.format_job_exec(job)
                 index = call.find("--slurm-jobstep-array-execs")
                 if index != -1:
                     call = call[:index]
-                self.logger.debug(f"Handling first job array task with index {array_index}")
+                self.logger.debug(
+                    f"Handling first job array task with index {array_index}"
+                )
                 self.logger.debug(f"Raw call for first array index: {call}")
             else:
                 self.logger.debug(f"Handling job array task with index {array_index}")
-                self.logger.debug(f"Raw array execs: {self.workflow.executor_settings.array_execs}") 
-                self.logger.debug(f"type of raw array execs: {type(self.workflow.executor_settings.array_execs)} ")
+                self.logger.debug(
+                    f"Raw array execs: {self.workflow.executor_settings.array_execs}"
+                )
+                self.logger.debug(
+                    f"type of raw array execs: {type(self.workflow.executor_settings.array_execs)} "
+                )
                 # extract the exec string from the passed json dict:
-                array_execs = parse_array_execs(self.workflow.executor_settings.array_execs)
+                array_execs = parse_array_execs(
+                    self.workflow.executor_settings.array_execs
+                )
                 compressed_hex = array_execs[str(array_index)]
                 compressed_bytes = bytes.fromhex(compressed_hex)
                 call = zlib.decompress(compressed_bytes).decode("utf-8")
-                self.logger.debug(f"Decompressed call for array index {array_index}: {call}")
+                self.logger.debug(
+                    f"Decompressed call for array index {array_index}: {call}"
+                )
         else:
             # SMP job, execute snakemake with srun, to ensure proper placing of threaded
             # executables within the c-group
