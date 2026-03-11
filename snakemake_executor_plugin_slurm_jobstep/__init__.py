@@ -151,10 +151,14 @@ class Executor(RealExecutor):
         # this is an array job
         elif self.job_array_task and self.workflow.executor_settings.array_execs:
             array_index = int(os.getenv("SLURM_ARRAY_TASK_ID"))
-            if array_index == 1:
+            # extract the exec string from the passed json dict:
+            array_execs = parse_array_execs(self.workflow.executor_settings.array_execs)
+            # get the minimum array index to determine the first task of the job array
+            min_array_index = min(int(key) for key in array_execs.keys())
+            if array_index == min_array_index:
                 # in this case we need to pass the exec strings of
                 # as for a single job, but with the extracted 
-                # --slurm-jobstep-arrays-execs flag
+                # --slurm-jobstep-array-execs flag
                 call = self.format_job_exec(job)
                 index = call.find("--slurm-jobstep-array-execs")
                 if index != -1:
@@ -164,8 +168,6 @@ class Executor(RealExecutor):
             else:
                 self.logger.debug(f"Handling job array task with index {array_index}")
                 self.logger.debug(f"Raw array execs: {self.workflow.executor_settings.array_execs}") 
-                # extract the exec string from the passed json dict:
-                array_execs = parse_array_execs(self.workflow.executor_settings.array_execs)
                 compressed_hex = array_execs[str(array_index)]
                 compressed_bytes = bytes.fromhex(compressed_hex)
                 call = zlib.decompress(compressed_bytes).decode("utf-8")
@@ -281,7 +283,7 @@ def get_cpu_setting(job: JobExecutorInterface, gpu: bool) -> str:
         return f"--cpus-per-task={cpus_per_task}"
 
 
-def parse_array_execs(raw_array_execs):
+def parse_array_execs(raw_array_execs) -> dict:
     """Parse array exec mapping from executor settings.
 
     Accepts strict JSON and Python literal dict strings for compatibility with
@@ -334,7 +336,7 @@ def parse_array_execs(raw_array_execs):
     return normalized
 
 
-def _parse_compact_array_execs(raw_array_execs: str):
+def _parse_compact_array_execs(raw_array_execs: str) -> dict | None:
     """Parse compact dict-like mapping with bare hex values.
 
     Expected shape: {2: a0ff..., 3: b19e...}
@@ -348,7 +350,7 @@ def _parse_compact_array_execs(raw_array_execs: str):
         return {}
 
     pair_pattern = re.compile(r"\s*([0-9]+)\s*:\s*([0-9a-fA-F]+)\s*(?:,|$)")
-    parsed = {}
+    parsed: dict[str, str] = {}
     position = 0
     while position < len(inner):
         while position < len(inner) and inner[position].isspace():
