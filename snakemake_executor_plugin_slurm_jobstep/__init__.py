@@ -160,11 +160,9 @@ class Executor(RealExecutor):
                 # as for a single job, but with the extracted
                 # --slurm-jobstep-array-execs flag
                 call = self.format_job_exec(job)
-                # index = call.find("--slurm-jobstep-array-execs")
-                # if index != -1:
-                #    call = call[:index]
-                # Remove the --slurm-jobstep-array-execs flag and its value
-                call = re.sub(r"--slurm-jobstep-array-execs\s+\S+\s*", "", call)
+                index = call.find("--slurm-jobstep-array-execs")
+                if index != -1:
+                    call = call[:index]
                 self.logger.debug(
                     f"Handling first job array task with index {array_index}"
                 )
