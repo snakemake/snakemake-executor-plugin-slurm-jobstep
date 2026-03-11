@@ -8,8 +8,8 @@ from snakemake_interface_common.exceptions import WorkflowError
 from snakemake_executor_plugin_slurm_jobstep import ExecutorSettings, parse_array_execs
 
 
-# Inserted for local test for utitlity functions, which do not require SLURM
-@pytest.mark.skipif(
+# Inserted for local test for utility functions, which do not require SLURM
+`@pytest.mark.skipif`(
     os.getenv("SLURM_JOB_ID") is None,
     reason="Workflow integration tests require running inside a SLURM allocation.",
 )
