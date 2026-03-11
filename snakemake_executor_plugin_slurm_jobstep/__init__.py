@@ -65,7 +65,7 @@ class ExecutorSettings(ExecutorSettingsBase):
         },
     )
     array_execs: str = field(
-        default=False,
+        default="",
         metadata={
             "help": (
                 "When a job array is used, this flag, will receive all job excec "
