@@ -86,7 +86,8 @@ class Executor(RealExecutor):
         self.jobid = os.getenv("SLURM_JOB_ID")
         # we consider this job to be a GPU job, if a GPU has been reserved
         self.gpu_job = os.getenv("SLURM_GPUS")
-        # check if SLURM_ARRAY_TASK_ID is set, to determine whether this is a job array task
+        # check if SLURM_ARRAY_TASK_ID is set, to determine whether this
+        # is a job array task
         self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
 
     def run_job(self, job: JobExecutorInterface):
@@ -174,7 +175,8 @@ class Executor(RealExecutor):
                     f"Raw array execs: {self.workflow.executor_settings.array_execs}"
                 )
                 self.logger.debug(
-                    f"type of raw array execs: {type(self.workflow.executor_settings.array_execs)} "
+                    "type of raw array execs: "
+                    f"{type(self.workflow.executor_settings.array_execs)} "
                 )
                 # extract the exec string from the passed json dict:
                 array_execs = parse_array_execs(
