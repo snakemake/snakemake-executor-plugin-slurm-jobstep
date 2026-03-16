@@ -3,6 +3,8 @@ __copyright__ = "Copyright 2023, David Lähnemann, Johannes Köster, Christian M
 __email__ = "johannes.koester@uni-due.de"
 __license__ = "MIT"
 
+import base64
+import binascii
 import os
 import socket
 import subprocess
@@ -153,33 +155,17 @@ class Executor(RealExecutor):
             array_index = int(os.getenv("SLURM_ARRAY_TASK_ID"))
             # extract the exec string from the passed json dict:
             array_execs = parse_array_execs(self.workflow.executor_settings.array_execs)
-            # get the minimum array index to determine the first task of the job array
-            min_array_index = min(int(key) for key in array_execs.keys())
-            if array_index == min_array_index:
-                # in this case we need to pass the exec strings of
-                # as for a single job, but with the extracted
-                # --slurm-jobstep-array-execs flag
-                call = self.format_job_exec(job)
-                index = call.find("--slurm-jobstep-array-execs")
-                if index != -1:
-                    call = call[:index]
+            # The first task is intentionally not included in the compressed
+            # mapping and is represented by the main job_exec string up to
+            # --slurm-jobstep-array-execs.
+            is_first_task = str(array_index) not in array_execs
+            if is_first_task:
+                raw_call = self.format_job_exec(job)
+                call = strip_array_execs_option(raw_call)
                 self.logger.debug(
-                    f"Handling first job array task with index {array_index}"
+                    f"Using raw call for first array task index {array_index}: {call}"
                 )
-                self.logger.debug(f"Raw call for first array index: {call}")
             else:
-                self.logger.debug(f"Handling job array task with index {array_index}")
-                self.logger.debug(
-                    f"Raw array execs: {self.workflow.executor_settings.array_execs}"
-                )
-                self.logger.debug(
-                    "type of raw array execs: "
-                    f"{type(self.workflow.executor_settings.array_execs)} "
-                )
-                # extract the exec string from the passed json dict:
-                array_execs = parse_array_execs(
-                    self.workflow.executor_settings.array_execs
-                )
                 compressed_hex = array_execs[str(array_index)]
                 compressed_bytes = bytes.fromhex(compressed_hex)
                 call = zlib.decompress(compressed_bytes).decode("utf-8")
@@ -311,9 +297,16 @@ def parse_array_execs(raw_array_execs) -> dict:
             "Invalid value for executor setting `array_execs`: expected str or dict."
         )
     else:
+        candidate = raw_array_execs.strip()
+        if (
+            len(candidate) >= 2
+            and candidate[0] == candidate[-1]
+            and candidate[0] in ("'", '"')
+        ):
+            candidate = candidate[1:-1]
         try:
-            parsed = json.loads(raw_array_execs)
-        except json.JSONDecodeError:
+            parsed = json.loads(base64.b64decode(candidate))
+        except (json.JSONDecodeError, binascii.Error, ValueError, TypeError):
             try:
                 parsed = ast.literal_eval(raw_array_execs)
             except (SyntaxError, ValueError):
@@ -348,6 +341,18 @@ def parse_array_execs(raw_array_execs) -> dict:
         normalized[key_str] = value
 
     return normalized
+
+
+def strip_array_execs_option(command: str) -> str:
+    """Strip --slurm-jobstep-array-execs and all trailing arguments.
+
+    Truncates the command at the first occurrence of --slurm-jobstep-array-execs
+    (in either --flag=value or --flag value form).
+    """
+    match = re.search(r"\s*--slurm-jobstep-array-execs(?:=|\s)", command)
+    if match:
+        return command[: match.start()].rstrip()
+    return command
 
 
 def _parse_compact_array_execs(raw_array_execs: str) -> dict | None:
