@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.4.0...v0.5.0) (2026-03-18)
+
+
+### Features
+
+* added handing and unpacking of job information for array jobs ([#40](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/40)) ([ff08ea9](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/ff08ea954612c3638129c832c091f9461a3cb92b))
+
 ## [0.4.0](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.3.0...v0.4.0) (2025-12-15)
 
 
