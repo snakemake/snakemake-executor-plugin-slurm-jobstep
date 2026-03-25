@@ -1,13 +1,23 @@
 from typing import Optional
 import os
 import base64
+import sys
+from pathlib import Path
+import zlib
 import pytest
 import snakemake.common.tests
 from snakemake_interface_executor_plugins.settings import ExecutorSettingsBase
 from snakemake_interface_common.exceptions import WorkflowError
 
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from snakemake_executor_plugin_slurm_jobstep import (
     ExecutorSettings,
+    _decompress_array_task_call,
+    _is_first_array_task,
     parse_array_execs,
     strip_array_execs_option,
 )
@@ -111,3 +121,33 @@ def test_strip_array_execs_option_separate_form():
     assert "--slurm-jobstep-array-execs" not in stripped
     assert "--executor slurm-jobstep" in stripped
     assert "--jobs 1" not in stripped
+
+
+def test_is_first_array_task_uses_task_min(monkeypatch):
+    monkeypatch.setenv("SLURM_ARRAY_TASK_MIN", "5")
+    assert _is_first_array_task(5)
+    assert not _is_first_array_task(6)
+
+
+def test_is_first_array_task_missing_task_min(monkeypatch):
+    monkeypatch.delenv("SLURM_ARRAY_TASK_MIN", raising=False)
+    assert not _is_first_array_task(1)
+
+
+def test_is_first_array_task_invalid_task_min_raises(monkeypatch):
+    monkeypatch.setenv("SLURM_ARRAY_TASK_MIN", "x")
+    with pytest.raises(WorkflowError, match="SLURM_ARRAY_TASK_MIN"):
+        _is_first_array_task(1)
+
+
+def test_decompress_array_task_call_missing_index_raises():
+    compressed = zlib.compress(b"echo hi").hex()
+    with pytest.raises(WorkflowError, match="Missing compressed array command"):
+        _decompress_array_task_call('{"2": "' + compressed + '"}', 3)
+
+
+def test_decompress_array_task_call_valid_payload():
+    expected = "echo hello"
+    compressed = zlib.compress(expected.encode("utf-8")).hex()
+    resolved = _decompress_array_task_call('{"2": "' + compressed + '"}', 2)
+    assert resolved == expected
