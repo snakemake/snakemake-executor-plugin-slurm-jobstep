@@ -153,22 +153,17 @@ class Executor(RealExecutor):
         # this is an array job
         elif self.job_array_task and self.workflow.executor_settings.array_execs:
             array_index = int(os.getenv("SLURM_ARRAY_TASK_ID"))
-            # extract the exec string from the passed json dict:
-            array_execs = parse_array_execs(self.workflow.executor_settings.array_execs)
-            # The first task is intentionally not included in the compressed
-            # mapping and is represented by the main job_exec string up to
-            # --slurm-jobstep-array-execs.
-            is_first_task = str(array_index) not in array_execs
-            if is_first_task:
+            if _is_first_array_task(array_index):
                 raw_call = self.format_job_exec(job)
                 call = strip_array_execs_option(raw_call)
                 self.logger.debug(
                     f"Using raw call for first array task index {array_index}: {call}"
                 )
             else:
-                compressed_hex = array_execs[str(array_index)]
-                compressed_bytes = bytes.fromhex(compressed_hex)
-                call = zlib.decompress(compressed_bytes).decode("utf-8")
+                call = _decompress_array_task_call(
+                    self.workflow.executor_settings.array_execs,
+                    array_index,
+                )
                 self.logger.debug(
                     f"Decompressed call for array index {array_index}: {call}"
                 )
@@ -353,6 +348,38 @@ def strip_array_execs_option(command: str) -> str:
     if match:
         return command[: match.start()].rstrip()
     return command
+
+
+def _is_first_array_task(array_index: int) -> bool:
+    """Return whether current task is the first job array task.
+
+    Prefers SLURM_ARRAY_TASK_MIN to avoid parsing potentially large array_exec
+    mappings in first tasks.
+    """
+    task_min = os.getenv("SLURM_ARRAY_TASK_MIN")
+    if task_min is None:
+        return False
+
+    try:
+        return array_index == int(task_min)
+    except ValueError as err:
+        raise WorkflowError(
+            f"Invalid SLURM_ARRAY_TASK_MIN value: {task_min!r}."
+        ) from err
+
+
+def _decompress_array_task_call(raw_array_execs: str, array_index: int) -> str:
+    """Return decompressed command for one array task index."""
+    array_execs = parse_array_execs(raw_array_execs)
+    compressed_hex = array_execs.get(str(array_index))
+    if compressed_hex is None:
+        raise WorkflowError(
+            "Missing compressed array command for task index "
+            f"{array_index} in executor setting `array_execs`."
+        )
+
+    compressed_bytes = bytes.fromhex(compressed_hex)
+    return zlib.decompress(compressed_bytes).decode("utf-8")
 
 
 def _parse_compact_array_execs(raw_array_execs: str) -> dict | None:
