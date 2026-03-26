@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.5.0...v0.6.0) (2026-03-25)
+
+
+### Features
+
+* improved array memory handling ([#42](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/42)) ([9dbf4e7](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/9dbf4e750e2e1b47ce2bc49a066770afc0497e7c))
+* update and relaxing requirements ([#44](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/44)) ([08d4a60](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/08d4a60d300d28da804af0bfd0ebe442ed7c27af))
+
 ## [0.5.0](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.4.0...v0.5.0) (2026-03-18)
 
 
