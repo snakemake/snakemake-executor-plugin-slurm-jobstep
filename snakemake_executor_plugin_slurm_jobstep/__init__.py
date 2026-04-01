@@ -172,17 +172,28 @@ class Executor(RealExecutor):
             # AND there can be stuff around the srun call within the job, like any
             # commands which should be executed before.
             call = self.format_job_exec(job)
+            if self.signal and self.signal.strip() and re.match(r"^\s*srun\b", call):
+                call = re.sub(
+                    r"^\s*srun\b",
+                    f"srun --signal={self.signal.strip()}",
+                    call,
+                    count=1,
+                )
         # this is an array job
         elif self.job_array_task and self.workflow.executor_settings.array_execs:
             array_index = int(os.getenv("SLURM_ARRAY_TASK_ID"))
+            call = "srun -n1 --cpu-bind=q "
+            if self.signal:
+                call += f"--signal={self.signal} "
+            call += f" {get_cpu_setting(job, self.gpu_job)} "
             if _is_first_array_task(array_index):
                 raw_call = self.format_job_exec(job)
-                call = strip_array_execs_option(raw_call)
+                call += strip_array_execs_option(raw_call)
                 self.logger.debug(
                     f"Using raw call for first array task index {array_index}: {call}"
                 )
             else:
-                call = _decompress_array_task_call(
+                call += _decompress_array_task_call(
                     self.workflow.executor_settings.array_execs,
                     array_index,
                 )
