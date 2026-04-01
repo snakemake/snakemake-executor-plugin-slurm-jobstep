@@ -14,6 +14,7 @@ import ast
 import re
 import zlib
 from dataclasses import dataclass, field
+from typing import Optional
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
 from snakemake_interface_executor_plugins.executors.real import RealExecutor
 from snakemake_interface_executor_plugins.jobs import (
@@ -53,7 +54,7 @@ common_settings = CommonSettings(
 class ExecutorSettings(ExecutorSettingsBase):
     """Settings for the SLURM jobstep executor plugin."""
 
-    pass_command_as_script: bool = field(
+    pass_command_as_script: Optional[bool] = field(
         default=False,
         metadata={
             "help": (
@@ -66,8 +67,8 @@ class ExecutorSettings(ExecutorSettingsBase):
             "required": False,
         },
     )
-    array_execs: str = field(
-        default="",
+    array_execs: Optional[str] = field(
+        default=None,
         metadata={
             "help": (
                 "When a job array is used, this flag, will receive all job excec "
@@ -75,6 +76,26 @@ class ExecutorSettings(ExecutorSettingsBase):
             ),
             "env_var": False,
             "required": False,
+        },
+    )
+    signal: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Signal to send to job steps for cancellation."
+            ),
+        "env_var": False,
+        "required": False,
+        },
+    )
+    singal: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Internal alias for --slurm-jobstep-signal."
+            ),
+        "env_var": False,
+        "required": False,
         },
     )
 
@@ -91,6 +112,7 @@ class Executor(RealExecutor):
         # check if SLURM_ARRAY_TASK_ID is set, to determine whether this
         # is a job array task
         self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
+        self.signal = self.workflow.executor_settings.signal
 
     def run_job(self, job: JobExecutorInterface):
         # Implement here how to run a job.
@@ -180,6 +202,8 @@ class Executor(RealExecutor):
             # has set the resources correctly.
 
             call = "srun -n1 --cpu-bind=q "
+            if self.signal:
+                call += f"--signal={self.signal} "
             call += f" {get_cpu_setting(job, self.gpu_job)} "
             if self.workflow.executor_settings.pass_command_as_script:
                 # format the job to execute with all the snakemake parameters
