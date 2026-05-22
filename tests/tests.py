@@ -18,6 +18,8 @@ from snakemake_executor_plugin_slurm_jobstep import (
     ExecutorSettings,
     _decompress_array_task_call,
     _is_first_array_task,
+    get_gpu_setting,
+    get_node_setting,
     parse_array_execs,
     strip_array_execs_option,
 )
@@ -151,3 +153,38 @@ def test_decompress_array_task_call_valid_payload():
     compressed = zlib.compress(expected.encode("utf-8")).hex()
     resolved = _decompress_array_task_call('{"2": "' + compressed + '"}', 2)
     assert resolved == expected
+
+
+class _DummyJob:
+    def __init__(self, resources):
+        self.resources = resources
+
+
+def test_get_gpu_setting_empty_when_not_set():
+    assert get_gpu_setting(_DummyJob({})) == ""
+
+
+def test_get_gpu_setting_from_gpus_resource():
+    assert get_gpu_setting(_DummyJob({"gpus": 2})) == "--gpus=2"
+
+
+def test_get_gpu_setting_zero_disables_flag():
+    assert get_gpu_setting(_DummyJob({"gpus": 0})) == ""
+
+
+def test_get_gpu_setting_non_integer_raises():
+    with pytest.raises(WorkflowError, match="gpus must be an integer"):
+        get_gpu_setting(_DummyJob({"gpus": "2"}))
+
+
+def test_get_node_setting_defaults_to_one():
+    assert get_node_setting(_DummyJob({})) == "--nodes=1"
+
+
+def test_get_node_setting_from_nodes_resource():
+    assert get_node_setting(_DummyJob({"nodes": 3})) == "--nodes=3"
+
+
+def test_get_node_setting_non_positive_raises():
+    with pytest.raises(WorkflowError, match="nodes must be > 0"):
+        get_node_setting(_DummyJob({"nodes": 0}))
