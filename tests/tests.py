@@ -1,6 +1,7 @@
 from typing import Optional
 import os
 import base64
+import signal
 import sys
 from pathlib import Path
 import zlib
@@ -17,7 +18,11 @@ if str(PROJECT_ROOT) not in sys.path:
 from snakemake_executor_plugin_slurm_jobstep import (
     ExecutorSettings,
     _decompress_array_task_call,
+    _forward_signal_to_non_snakemake_descendants,
+    _is_python_cmdline,
+    _is_snakemake_cmdline,
     _is_first_array_task,
+    _parse_trapped_signal,
     parse_array_execs,
     strip_array_execs_option,
 )
@@ -151,3 +156,204 @@ def test_decompress_array_task_call_valid_payload():
     compressed = zlib.compress(expected.encode("utf-8")).hex()
     resolved = _decompress_array_task_call('{"2": "' + compressed + '"}', 2)
     assert resolved == expected
+
+
+def test_parse_trapped_signal_with_time_suffix():
+    assert _parse_trapped_signal("12@60") == 12
+    assert _parse_trapped_signal("15@120") == 15
+
+
+def test_parse_trapped_signal_without_time_suffix():
+    assert _parse_trapped_signal("12") == 12
+
+
+def test_parse_trapped_signal_with_slurm_batch_prefix():
+    assert _parse_trapped_signal("B:23@60") == 23
+
+
+def test_parse_trapped_signal_empty_is_none():
+    assert _parse_trapped_signal(None) is None
+    assert _parse_trapped_signal("   ") is None
+
+
+def test_parse_trapped_signal_invalid_raises():
+    with pytest.raises(WorkflowError, match="Invalid signal setting"):
+        _parse_trapped_signal("SIGUSR2@60")
+
+
+def test_is_snakemake_cmdline_true_for_snakemake_invocations():
+    assert _is_snakemake_cmdline("python -m snakemake --cores 1")
+    assert _is_snakemake_cmdline("/usr/bin/snakemake --executor slurm")
+
+
+def test_is_snakemake_cmdline_false_for_non_snakemake_cmdlines():
+    assert not _is_snakemake_cmdline("/usr/bin/bash -lc bwa mem ref.fa reads.fq")
+
+
+def test_is_python_cmdline_true_for_python_invocations():
+    assert _is_python_cmdline("python -m module")
+    assert _is_python_cmdline("/usr/bin/python3.13 -m snakemake")
+
+
+def test_is_python_cmdline_false_for_non_python_invocations():
+    assert not _is_python_cmdline("/usr/bin/bash -lc bwa mem ref.fa reads.fq")
+    assert not _is_python_cmdline("/opt/bin/mypython-wrapper run")
+
+
+def test_forward_signal_forwards_all_descendants(monkeypatch):
+    """Verify signals propagate through all descendants, including nested snakemake."""
+    class _DummyLogger:
+        def debug(self, *_args, **_kwargs):
+            pass
+
+        def info(self, *_args, **_kwargs):
+            pass
+
+        def warning(self, *_args, **_kwargs):
+            pass
+
+    class _DummyProc:
+        pid = 100
+
+        @staticmethod
+        def poll():
+            return None
+
+    monkeypatch.setattr(
+        "snakemake_executor_plugin_slurm_jobstep._get_descendant_pids",
+        lambda _pid: {101, 102, 103},
+    )
+
+    cmdlines = {
+        101: "/usr/bin/python3 -m snakemake --cores 1",
+        102: "/usr/bin/python3 worker.py",
+        103: "/usr/bin/bash -lc sleep 60",
+    }
+    monkeypatch.setattr(
+        "snakemake_executor_plugin_slurm_jobstep._read_cmdline",
+        lambda pid: cmdlines[pid],
+    )
+
+    killed = []
+
+    def _fake_kill(pid, signum):
+        killed.append((pid, signum))
+
+    monkeypatch.setattr(os, "kill", _fake_kill)
+
+    forwarded = _forward_signal_to_non_snakemake_descendants(
+        _DummyProc(), signal.SIGURG, _DummyLogger()
+    )
+
+    # All descendants receive the signal, including nested snakemake/python
+    assert forwarded == 3
+    assert killed == [(101, signal.SIGURG), (102, signal.SIGURG), (103, signal.SIGURG)]
+
+
+def test_forward_signal_uses_process_group_fallback(monkeypatch):
+    class _DummyLogger:
+        def debug(self, *_args, **_kwargs):
+            pass
+
+        def info(self, *_args, **_kwargs):
+            pass
+
+        def warning(self, *_args, **_kwargs):
+            pass
+
+    class _DummyProc:
+        pid = 200
+
+        @staticmethod
+        def poll():
+            return None
+
+    monkeypatch.setattr(
+        "snakemake_executor_plugin_slurm_jobstep._get_descendant_pids",
+        lambda _pid: set(),
+    )
+    monkeypatch.setattr(
+        "snakemake_executor_plugin_slurm_jobstep._get_same_process_group_pids",
+        lambda _pid: {200, 201, 202},
+    )
+
+    cmdlines = {
+        201: "/usr/bin/python3 -m snakemake --cores 1",
+        202: "/usr/bin/bash -lc sleep 60",
+    }
+    monkeypatch.setattr(
+        "snakemake_executor_plugin_slurm_jobstep._read_cmdline",
+        lambda pid: cmdlines.get(pid, ""),
+    )
+
+    killed = []
+
+    def _fake_kill(pid, signum):
+        killed.append((pid, signum))
+
+    monkeypatch.setattr(os, "kill", _fake_kill)
+
+    forwarded = _forward_signal_to_non_snakemake_descendants(
+        _DummyProc(), signal.SIGURG, _DummyLogger()
+    )
+
+    # Now forwards to all, including the nested snakemake
+    assert forwarded == 2
+    assert killed == [(201, signal.SIGURG), (202, signal.SIGURG)]
+
+
+def test_forward_signal_includes_user_process_candidates(monkeypatch):
+    class _DummyLogger:
+        def debug(self, *_args, **_kwargs):
+            pass
+
+        def info(self, *_args, **_kwargs):
+            pass
+
+        def warning(self, *_args, **_kwargs):
+            pass
+
+    class _DummyProc:
+        pid = 400
+
+        @staticmethod
+        def poll():
+            return None
+
+    monkeypatch.setattr(
+        "snakemake_executor_plugin_slurm_jobstep._get_descendant_pids",
+        lambda _pid: {403},
+    )
+    monkeypatch.setattr(
+        "snakemake_executor_plugin_slurm_jobstep._get_same_process_group_pids",
+        lambda _pid: set(),
+    )
+    monkeypatch.setattr(
+        "snakemake_executor_plugin_slurm_jobstep._get_user_process_pids",
+        lambda _uid: {401, 402},
+    )
+
+    cmdlines = {
+        403: "/usr/bin/bash -lc true",
+        401: "/usr/bin/python3 -m snakemake --cores 1",
+        402: "/usr/bin/bash -lc sleep 60",
+    }
+    monkeypatch.setattr(
+        "snakemake_executor_plugin_slurm_jobstep._read_cmdline",
+        lambda pid: cmdlines.get(pid, ""),
+    )
+
+    killed = []
+
+    def _fake_kill(pid, signum):
+        killed.append((pid, signum))
+
+    monkeypatch.setattr(os, "kill", _fake_kill)
+
+    forwarded = _forward_signal_to_non_snakemake_descendants(
+        _DummyProc(), signal.SIGURG, _DummyLogger()
+    )
+
+    # Now forwards to all candidates, including python and bash processes
+    assert forwarded == 3
+    assert killed == [(401, signal.SIGURG), (402, signal.SIGURG), (403, signal.SIGURG)]
