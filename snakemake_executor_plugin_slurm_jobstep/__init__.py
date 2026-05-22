@@ -6,6 +6,7 @@ __license__ = "MIT"
 import base64
 import binascii
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -13,6 +14,7 @@ import json
 import ast
 import re
 import zlib
+import pwd
 from dataclasses import dataclass, field
 from typing import Optional
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
@@ -48,8 +50,6 @@ common_settings = CommonSettings(
     auto_deploy_default_storage_provider=False,
     spawned_jobs_assume_shared_fs=True,
 )
-
-
 @dataclass
 class ExecutorSettings(ExecutorSettingsBase):
     """Settings for the SLURM jobstep executor plugin."""
@@ -82,20 +82,11 @@ class ExecutorSettings(ExecutorSettingsBase):
         default=None,
         metadata={
             "help": (
-                "Signal to send to job steps for cancellation."
+                "Internal use only: The signal to trap and forward to job steps."
+                "If not set, no signal forwarding will be performed."
             ),
-        "env_var": False,
-        "required": False,
-        },
-    )
-    singal: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": (
-                "Internal alias for --slurm-jobstep-signal."
-            ),
-        "env_var": False,
-        "required": False,
+            "env_var": False,
+            "required": False,
         },
     )
 
@@ -112,7 +103,10 @@ class Executor(RealExecutor):
         # check if SLURM_ARRAY_TASK_ID is set, to determine whether this
         # is a job array task
         self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
-        self.signal = self.workflow.executor_settings.signal
+        self.signal_setting = self.workflow.executor_settings.signal
+        self.logger.debug(
+            f"Executor initialized with signal setting: {self.signal_setting}"
+        )
 
     def run_job(self, job: JobExecutorInterface):
         # Implement here how to run a job.
@@ -162,6 +156,8 @@ class Executor(RealExecutor):
         #         # now: the last one
         #         # this way, we ensure that level jobs depending on the current level
         #         # get started
+        srun_signal_setting = _get_srun_signal_setting(self.signal_setting)
+
         if "mpi" in job.resources.keys():
             # MPI job:
             # No need to prepend `srun`, as this will happen inside of the job's shell
@@ -172,10 +168,10 @@ class Executor(RealExecutor):
             # AND there can be stuff around the srun call within the job, like any
             # commands which should be executed before.
             call = self.format_job_exec(job)
-            if self.signal and self.signal.strip() and re.match(r"^\s*srun\b", call):
+            if srun_signal_setting and re.match(r"^\s*srun\b", call):
                 call = re.sub(
                     r"^\s*srun\b",
-                    f"srun --signal={self.signal.strip()}",
+                    f"srun --signal={srun_signal_setting}",
                     call,
                     count=1,
                 )
@@ -183,8 +179,8 @@ class Executor(RealExecutor):
         elif self.job_array_task and self.workflow.executor_settings.array_execs:
             array_index = int(os.getenv("SLURM_ARRAY_TASK_ID"))
             call = "srun -n1 --cpu-bind=q "
-            if self.signal:
-                call += f"--signal={self.signal} "
+            if srun_signal_setting:
+                call += f"--signal={srun_signal_setting} "
             call += f" {get_cpu_setting(job, self.gpu_job)} "
             if _is_first_array_task(array_index):
                 raw_call = self.format_job_exec(job)
@@ -213,8 +209,8 @@ class Executor(RealExecutor):
             # has set the resources correctly.
 
             call = "srun -n1 --cpu-bind=q "
-            if self.signal:
-                call += f"--signal={self.signal} "
+            if srun_signal_setting:
+                call += f"--signal={srun_signal_setting} "
             call += f" {get_cpu_setting(job, self.gpu_job)} "
             if self.workflow.executor_settings.pass_command_as_script:
                 # format the job to execute with all the snakemake parameters
@@ -230,10 +226,69 @@ class Executor(RealExecutor):
         self.logger.debug(f"Job is running on host: {socket.gethostname()}")
         if srun_script is not None:
             self.logger.debug(f"The script for this job is: \n{srun_script}")
+
+        previous_handlers: dict[int, object] = {}
+        trapped_signal = _parse_trapped_signal(self.signal_setting)
+        if trapped_signal is not None:
+            self.logger.info(f"Signal forwarding enabled for signal {trapped_signal}.")
+
+        signal_forwarded = False
+        pending_signal: Optional[int] = None
+
+        def _forward_handler(received_signal, _frame):
+            nonlocal signal_forwarded, pending_signal
+            if signal_forwarded:
+                self.logger.debug(
+                    f"Signal {received_signal} received again; signal has already been forwarded once."
+                )
+                return
+
+            self.logger.info(
+                f"Received signal {received_signal}, forwarding to non-Snakemake descendant processes."
+            )
+            proc = jobsteps.get(job)
+            if proc is None:
+                pending_signal = received_signal
+                self.logger.info(
+                    f"Received signal {received_signal} before job process became available; postponing forwarding."
+                )
+                return
+            if proc.poll() is not None:
+                self.logger.warning(
+                    f"Job process PID {proc.pid} already terminated; cannot forward signal {received_signal}."
+                )
+                return
+
+            signal_forwarded = True
+            self.logger.debug(f"Job process PID: {proc.pid}, poll status: {proc.poll()}")
+            forwarded_count = _forward_signal_to_non_snakemake_descendants(
+                proc, received_signal, self.logger
+            )
+            self.logger.info(
+                f"Forwarded signal {received_signal} to {forwarded_count} non-Snakemake, non-Python processes."
+            )
+
+        if trapped_signal is not None:
+            try:
+                previous_handlers[trapped_signal] = signal.getsignal(trapped_signal)
+                signal.signal(trapped_signal, _forward_handler)
+                self.logger.info(
+                    f"Registered forwarding handler for signal {trapped_signal}."
+                )
+            except (OSError, RuntimeError, ValueError) as err:
+                raise WorkflowError(
+                    f"Failed to register signal handler for signal {trapped_signal}."
+                ) from err
+
         # this dict is to support the to be implemented feature of oversubscription in
         # "ordinary" group jobs.
         jobsteps[job] = subprocess.Popen(
-            call, shell=True, text=True, stdin=subprocess.PIPE
+            call,
+            shell=True,
+            text=True,
+            stdin=subprocess.PIPE,
+            # Keep all descendants in one process group so signals can be forwarded.
+            start_new_session=True,
         )
         if srun_script is not None:
             try:
@@ -251,14 +306,29 @@ class Executor(RealExecutor):
                     f"Job {job} failed: subprocess terminated before reading script"
                 )
 
+        if pending_signal is not None and not signal_forwarded:
+            self.logger.info(
+                f"Processing postponed forwarding for signal {pending_signal}."
+            )
+            _forward_handler(pending_signal, None)
+
         job_info = SubmittedJobInfo(job)
         self.report_job_submission(job_info)
 
-        # wait until all steps are finished
-        if any(proc.wait() != 0 for proc in jobsteps.values()):
-            self.report_job_error(job_info)
-        else:
-            self.report_job_success(job_info)
+        try:
+            # wait until all steps are finished
+            if any(proc.wait() != 0 for proc in jobsteps.values()):
+                self.report_job_error(job_info)
+            else:
+                self.report_job_success(job_info)
+        finally:
+            if trapped_signal is not None:
+                for signum, previous_handler in previous_handlers.items():
+                    try:
+                        signal.signal(signum, previous_handler)
+                    except (OSError, RuntimeError, ValueError):
+                        # Best effort restore; process is about to finish anyway.
+                        pass
 
     def cancel(self):
         pass
@@ -415,6 +485,254 @@ def _decompress_array_task_call(raw_array_execs: str, array_index: int) -> str:
 
     compressed_bytes = bytes.fromhex(compressed_hex)
     return zlib.decompress(compressed_bytes).decode("utf-8")
+
+
+def _parse_trapped_signal(signal_setting: Optional[str]) -> Optional[int]:
+    """Extract signal number from '<signal>@<seconds>' or 'B:<signal>@<seconds>'."""
+    if signal_setting is None:
+        return None
+
+    signal_text = signal_setting.strip()
+    if not signal_text:
+        return None
+
+    signal_spec, _, _ = signal_text.partition("@")
+    signal_spec = signal_spec.strip()
+    if signal_spec.upper().startswith("B:"):
+        signal_spec = signal_spec[2:].strip()
+
+    try:
+        return int(signal_spec)
+    except ValueError as err:
+        raise WorkflowError(
+            "Invalid signal setting: expected '<signal number>@<seconds>', "
+            "'<signal number>', or 'B:<signal number>@<seconds>'."
+        ) from err
+
+
+def _get_srun_signal_setting(signal_setting: Optional[str]) -> Optional[str]:
+    """Return normalized signal setting string for use with srun --signal."""
+    if signal_setting is None:
+        return None
+
+    setting = signal_setting.strip()
+    if not setting:
+        return None
+
+    if setting.upper().startswith("B:"):
+        setting = setting[2:].strip()
+
+    return setting or None
+
+
+def _forward_signal_to_non_snakemake_descendants(
+    process: Optional[subprocess.Popen], signum: int, logger
+) -> int:
+    """Forward a signal to non-Snakemake, non-Python related processes."""
+    if process is None or process.poll() is not None:
+        logger.debug(f"Process is None or already terminated.")
+        return 0
+
+    root_pid = process.pid
+    logger.debug(f"Scanning descendants and process-group peers of PID {root_pid}.")
+    descendants = _get_descendant_pids(root_pid)
+    group_peers = _get_same_process_group_pids(root_pid)
+    user_candidates = _get_user_process_pids(os.getuid())
+    candidates = descendants.union(group_peers).union(user_candidates)
+    logger.debug(
+        f"Found {len(descendants)} descendant PIDs: {sorted(descendants)}; "
+        f"{len(group_peers)} same-group PIDs: {sorted(group_peers)}; "
+        f"{len(user_candidates)} user-candidate PIDs: {sorted(user_candidates)}; "
+        f"{len(candidates)} total candidate PIDs."
+    )
+    logger.info(
+        "Signal forwarding candidate scan: "
+        f"descendants={len(descendants)}, same_group={len(group_peers)}, "
+        f"user_candidates={len(user_candidates)}, "
+        f"total={len(candidates)}"
+    )
+
+    forwarded = 0
+    for pid in sorted(candidates):
+        if pid == root_pid:
+            continue
+        cmdline = _read_cmdline(pid)
+        logger.debug(
+            f"PID {pid}: cmdline='{cmdline}'"
+        )
+        # Forward signal to all descendants, including nested snakemake/python.
+        # The root jobstep executor already has the handler registered,
+        # so we propagate down the entire process tree to reach user code.
+        try:
+            os.kill(pid, signum)
+            logger.debug(f"Sent signal {signum} to PID {pid}.")
+            forwarded += 1
+        except ProcessLookupError:
+            logger.debug(f"PID {pid} already terminated.")
+            continue
+        except PermissionError as err:
+            logger.warning(f"Failed to forward signal {signum} to pid {pid}: {err}")
+
+    return forwarded
+
+def _get_user_process_pids(uid: int) -> set[int]:
+    """Return all process IDs for the given uid using ps output."""
+    try:
+        user_name = pwd.getpwuid(uid).pw_name
+    except KeyError:
+        return set()
+
+    try:
+        result = subprocess.run(
+            ["ps", "-u", user_name, "-o", "pid="],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return set()
+
+    if result.returncode != 0:
+        return set()
+
+    pids: set[int] = set()
+    for line in result.stdout.splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            pids.add(int(text))
+        except ValueError:
+            continue
+
+    return pids
+
+
+def _get_same_process_group_pids(root_pid: int) -> set[int]:
+    """Return all PIDs in the same process group as root_pid."""
+    root_stat_path = f"/proc/{root_pid}/stat"
+    try:
+        with open(root_stat_path, "r", encoding="utf-8") as f:
+            root_stat = f.read()
+    except OSError:
+        return set()
+
+    root_close_paren_index = root_stat.rfind(")")
+    if root_close_paren_index == -1:
+        return set()
+
+    root_fields = root_stat[root_close_paren_index + 2 :].split()
+    if len(root_fields) < 3:
+        return set()
+
+    try:
+        root_pgrp = int(root_fields[2])
+    except ValueError:
+        return set()
+
+    try:
+        proc_entries = os.listdir("/proc")
+    except OSError:
+        return set()
+
+    same_group: set[int] = set()
+    for entry in proc_entries:
+        if not entry.isdigit():
+            continue
+
+        pid = int(entry)
+        stat_path = f"/proc/{pid}/stat"
+        try:
+            with open(stat_path, "r", encoding="utf-8") as f:
+                stat_content = f.read()
+        except OSError:
+            continue
+
+        close_paren_index = stat_content.rfind(")")
+        if close_paren_index == -1:
+            continue
+
+        fields = stat_content[close_paren_index + 2 :].split()
+        if len(fields) < 3:
+            continue
+
+        try:
+            pgrp = int(fields[2])
+        except ValueError:
+            continue
+
+        if pgrp == root_pgrp:
+            same_group.add(pid)
+
+    return same_group
+
+
+def _get_descendant_pids(root_pid: int) -> set[int]:
+    """Return all descendant PIDs for a process by scanning /proc."""
+    parent_to_children: dict[int, set[int]] = {}
+
+    try:
+        proc_entries = os.listdir("/proc")
+    except OSError as err:
+        return set()
+
+    for entry in proc_entries:
+        if not entry.isdigit():
+            continue
+        pid = int(entry)
+        stat_path = f"/proc/{pid}/stat"
+        try:
+            with open(stat_path, "r", encoding="utf-8") as f:
+                stat_content = f.read()
+        except OSError:
+            continue
+
+        close_paren_index = stat_content.rfind(")")
+        if close_paren_index == -1:
+            continue
+        fields = stat_content[close_paren_index + 2 :].split()
+        if len(fields) < 2:
+            continue
+        try:
+            ppid = int(fields[1])
+        except ValueError:
+            continue
+
+        parent_to_children.setdefault(ppid, set()).add(pid)
+
+    descendants: set[int] = set()
+    stack = list(parent_to_children.get(root_pid, set()))
+    while stack:
+        current = stack.pop()
+        if current in descendants:
+            continue
+        descendants.add(current)
+        stack.extend(parent_to_children.get(current, set()))
+
+    return descendants
+
+
+def _read_cmdline(pid: int) -> str:
+    """Read process command line from /proc; return empty string on failure."""
+    cmdline_path = f"/proc/{pid}/cmdline"
+    try:
+        with open(cmdline_path, "rb") as f:
+            raw = f.read()
+    except OSError:
+        return ""
+
+    # /proc/<pid>/cmdline is NUL-delimited.
+    return raw.replace(b"\x00", b" ").decode("utf-8", errors="ignore").strip()
+
+
+def _is_snakemake_cmdline(cmdline: str) -> bool:
+    """Return whether a process command line corresponds to snakemake."""
+    return "snakemake" in cmdline.lower()
+
+
+def _is_python_cmdline(cmdline: str) -> bool:
+    """Return whether a process command line corresponds to a Python process."""
+    return bool(re.search(r"(?:^|[\s/])python(?:[0-9.]+)?(?:\s|$)", cmdline.lower()))
 
 
 def _parse_compact_array_execs(raw_array_execs: str) -> dict | None:
