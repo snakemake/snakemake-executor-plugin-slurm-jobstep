@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.6.0...v0.6.1) (2026-05-27)
+
+
+### Bug Fixes
+
+* safer gpu usage - dropping SLURM env to avoid conflicting vars, … ([#46](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/46)) ([d0c515c](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/d0c515c40179e5b959c239247c6f3819068bd8c5))
+
 ## [0.6.0](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.5.0...v0.6.0) (2026-03-25)
 
 
