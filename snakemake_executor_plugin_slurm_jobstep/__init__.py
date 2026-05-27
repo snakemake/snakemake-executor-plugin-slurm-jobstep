@@ -26,7 +26,6 @@ from snakemake_interface_executor_plugins.settings import (
 )
 from snakemake_interface_common.exceptions import WorkflowError
 
-
 # Required:
 # Specify common settings shared by various executors.
 common_settings = CommonSettings(
