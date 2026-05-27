@@ -26,7 +26,6 @@ from snakemake_interface_executor_plugins.settings import (
 )
 from snakemake_interface_common.exceptions import WorkflowError
 
-
 # Required:
 # Specify common settings shared by various executors.
 common_settings = CommonSettings(
@@ -91,6 +90,8 @@ class Executor(RealExecutor):
         # check if SLURM_ARRAY_TASK_ID is set, to determine whether this
         # is a job array task
         self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
+        # print environment variables for debugging purposes
+        self.logger.debug(f"environment: {os.environ}")
 
     def run_job(self, job: JobExecutorInterface):
         # Implement here how to run a job.
@@ -181,6 +182,8 @@ class Executor(RealExecutor):
 
             call = "srun -n1 --cpu-bind=q "
             call += f" {get_cpu_setting(job, self.gpu_job)} "
+            call += f" {get_gpu_setting(job)} "
+            call += f" {get_node_setting(job)} "
             if self.workflow.executor_settings.pass_command_as_script:
                 # format the job to execute with all the snakemake parameters
                 # into a script
@@ -197,8 +200,37 @@ class Executor(RealExecutor):
             self.logger.debug(f"The script for this job is: \n{srun_script}")
         # this dict is to support the to be implemented feature of oversubscription in
         # "ordinary" group jobs.
+        # Sanitize inherited SLURM task/GPU settings for nested srun:
+        # these are allocation-level values and can conflict with explicit step flags.
+        popen_env = os.environ.copy()
+        # Nested srun should not inherit parent step resource defaults.
+        # Keep only allocation identity-related SLURM vars.
+        keep_slurm = {
+            "SLURM_JOB_ID",
+            "SLURM_JOBID",
+            "SLURM_ARRAY_JOB_ID",
+            "SLURM_ARRAY_TASK_ID",
+            "SLURM_ARRAY_TASK_MIN",
+            "SLURM_ARRAY_TASK_MAX",
+            "SLURM_ARRAY_TASK_STEP",
+            "SLURM_CLUSTER_NAME",
+            "SLURM_SUBMIT_DIR",
+            "SLURM_SUBMIT_HOST",
+        }
+        for var in list(popen_env):
+            if var.startswith("SLURM_") and var not in keep_slurm:
+                popen_env.pop(var, None)
+            # Also drop inherited client-side defaults for nested srun/sbatch.
+            # These can silently add options like GRES/TRES to the inner srun.
+            if var.startswith("SRUN_") or var.startswith("SBATCH_"):
+                popen_env.pop(var, None)
+
         jobsteps[job] = subprocess.Popen(
-            call, shell=True, text=True, stdin=subprocess.PIPE
+            call,
+            shell=True,
+            text=True,
+            stdin=subprocess.PIPE,
+            env=popen_env,
         )
         if srun_script is not None:
             try:
@@ -276,6 +308,43 @@ def get_cpu_setting(job: JobExecutorInterface, gpu: bool) -> str:
         return f"--cpus-per-gpu={cpus_per_gpu}"
     else:
         return f"--cpus-per-task={cpus_per_task}"
+
+
+def _coerce_int_resource(value, resource_name: str) -> int:
+    if not isinstance(value, int):
+        raise WorkflowError(f"{resource_name} must be an integer, but is {value}")
+    return value
+
+
+def get_gpu_setting(job: JobExecutorInterface) -> str:
+    # Set GPU count explicitly only when requested by workflow resources.
+    # Keep this key list short and explicit to avoid accidental mappings.
+    gpu_value = None
+    for key in ("gpus", "gpu", "nvidia_gpu"):
+        value = job.resources.get(key)
+        if value is not None:
+            gpu_value = _coerce_int_resource(value, key)
+            break
+
+    if gpu_value is None or gpu_value <= 0:
+        return ""
+    return f"--gpus={gpu_value}"
+
+
+def get_node_setting(job: JobExecutorInterface) -> str:
+    # Force single-node step placement unless user provided explicit node count.
+    node_value = None
+    for key in ("nodes", "node", "slurm_nodes"):
+        value = job.resources.get(key)
+        if value is not None:
+            node_value = _coerce_int_resource(value, key)
+            break
+
+    if node_value is None:
+        return "--nodes=1"
+    if node_value <= 0:
+        raise WorkflowError(f"nodes must be > 0, but is {node_value}")
+    return f"--nodes={node_value}"
 
 
 def parse_array_execs(raw_array_execs) -> dict:
