@@ -90,10 +90,45 @@ class Executor(RealExecutor):
         # check if SLURM_ARRAY_TASK_ID is set, to determine whether this
         # is a job array task
         self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
+        # Read inherited attempt state from outer executor
+        inherited_attempt = os.getenv("SNAKEMAKE_ATTEMPT")
+        if inherited_attempt:
+            try:
+                self.inherited_attempt = int(inherited_attempt)
+                self.logger.info(
+                    f"Inherited attempt state from outer executor: {self.inherited_attempt}"
+                )
+            except ValueError:
+                self.logger.warning(
+                    f"Invalid SNAKEMAKE_ATTEMPT value: {inherited_attempt}, ignoring"
+                )
+                self.inherited_attempt = None
+        else:
+            self.inherited_attempt = None
         # print environment variables for debugging purposes
         self.logger.debug(f"environment: {os.environ}")
 
     def run_job(self, job: JobExecutorInterface):
+        # Temporarily override attempt for resource calculation if inherited
+        if self.inherited_attempt is not None:
+            original_attempt = job.attempt
+            self.logger.debug(
+                f"Using inherited attempt {self.inherited_attempt} for resource calculation "
+                f"(job reports attempt {original_attempt})"
+            )
+            job.attempt = self.inherited_attempt
+        else:
+            original_attempt = None
+        
+        try:
+            self._run_job_impl(job)
+        finally:
+            # CRITICAL: Restore original attempt so Snakemake can track completion
+            if original_attempt is not None:
+                job.attempt = original_attempt
+                self.logger.debug(f"Restored job attempt to {original_attempt}")
+    
+    def _run_job_impl(self, job: JobExecutorInterface):
         # Implement here how to run a job.
         # You can access the job's resources, etc.
         # via the job object.
