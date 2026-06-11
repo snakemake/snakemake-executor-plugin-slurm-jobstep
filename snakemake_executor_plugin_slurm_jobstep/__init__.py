@@ -91,13 +91,21 @@ class Executor(RealExecutor):
         # is a job array task
         self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
         # Read inherited attempt state from outer executor
-        inherited_attempt = os.getenv("SNAKEMAKE_ATTEMPT")
+        inherited_attempt = os.getenv("SNAKEMAKE_ATTEMPT", 1)
         if inherited_attempt:
             try:
-                self.inherited_attempt = int(inherited_attempt)
-                self.logger.info(
-                    f"Inherited attempt state from outer executor: {self.inherited_attempt}"
-                )
+                attempt_value = int(inherited_attempt)
+                if attempt_value < 1:
+                    self.logger.warning(
+                        f"Invalid SNAKEMAKE_ATTEMPT value: {attempt_value} "
+                        "(must be >= 1), ignoring"
+                    )
+                    self.inherited_attempt = None
+                else:
+                    self.inherited_attempt = attempt_value
+                    self.logger.info(
+                        f"Inherited attempt state from outer executor: {self.inherited_attempt}"
+                    )
             except ValueError:
                 self.logger.warning(
                     f"Invalid SNAKEMAKE_ATTEMPT value: {inherited_attempt}, ignoring"
