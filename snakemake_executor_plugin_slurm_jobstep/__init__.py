@@ -90,29 +90,27 @@ class Executor(RealExecutor):
         # check if SLURM_ARRAY_TASK_ID is set, to determine whether this
         # is a job array task
         self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
-        # Read inherited attempt state from outer executor
-        inherited_attempt = os.getenv("SNAKEMAKE_ATTEMPT", 1)
-        if inherited_attempt:
-            try:
-                attempt_value = int(inherited_attempt)
-                if attempt_value < 1:
-                    self.logger.warning(
-                        f"Invalid SNAKEMAKE_ATTEMPT value: {attempt_value} "
-                        "(must be >= 1), ignoring"
-                    )
-                    self.inherited_attempt = None
-                else:
-                    self.inherited_attempt = attempt_value
-                    self.logger.info(
-                        f"Inherited attempt state from outer executor: {self.inherited_attempt}"
-                    )
-            except ValueError:
-                self.logger.warning(
-                    f"Invalid SNAKEMAKE_ATTEMPT value: {inherited_attempt}, ignoring"
-                )
-                self.inherited_attempt = None
+        
+        # Read inherited attempt from outer executor via ExecutorSettings
+        inherited_attempt = getattr(self.workflow.executor_settings, '_inherited_attempt', 0)
+        if inherited_attempt > 0:
+            self.inherited_attempt = inherited_attempt
+            self.logger.info(
+                f"Inherited attempt state from outer executor: {self.inherited_attempt}"
+            )
         else:
             self.inherited_attempt = None
+        
+        # CRITICAL FIX: Disable retries for all rules in inner executor
+        # The outer executor (sbatch) handles all retries
+        for rule in self.workflow.rules:
+            if rule.restart_times > 0:
+                self.logger.debug(
+                    f"Forcing restart_times=0 for rule {rule.name} in inner executor "
+                    f"(was {rule.restart_times})"
+                )
+                rule._restart_times = 0
+        
         # print environment variables for debugging purposes
         self.logger.debug(f"environment: {os.environ}")
 
@@ -125,6 +123,7 @@ class Executor(RealExecutor):
                 f"(job reports attempt {original_attempt})"
             )
             job.attempt = self.inherited_attempt
+            job.reset_params_and_resources()
         else:
             original_attempt = None
         
@@ -134,6 +133,7 @@ class Executor(RealExecutor):
             # CRITICAL: Restore original attempt so Snakemake can track completion
             if original_attempt is not None:
                 job.attempt = original_attempt
+                job.reset_params_and_resources()
                 self.logger.debug(f"Restored job attempt to {original_attempt}")
     
     def _run_job_impl(self, job: JobExecutorInterface):
