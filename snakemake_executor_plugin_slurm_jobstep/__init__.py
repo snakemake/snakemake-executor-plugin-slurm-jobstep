@@ -90,10 +90,53 @@ class Executor(RealExecutor):
         # check if SLURM_ARRAY_TASK_ID is set, to determine whether this
         # is a job array task
         self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
+        
+        # Read inherited attempt from outer executor via ExecutorSettings
+        inherited_attempt = getattr(self.workflow.executor_settings, '_inherited_attempt', 0)
+        if inherited_attempt > 0:
+            self.inherited_attempt = inherited_attempt
+            self.logger.info(
+                f"Inherited attempt state from outer executor: {self.inherited_attempt}"
+            )
+        else:
+            self.inherited_attempt = None
+        
+        # CRITICAL FIX: Disable retries for all rules in inner executor
+        # The outer executor (sbatch) handles all retries
+        for rule in self.workflow.rules:
+            if rule.restart_times > 0:
+                self.logger.debug(
+                    f"Forcing restart_times=0 for rule {rule.name} in inner executor "
+                    f"(was {rule.restart_times})"
+                )
+                rule._restart_times = 0
+        
         # print environment variables for debugging purposes
         self.logger.debug(f"environment: {os.environ}")
 
     def run_job(self, job: JobExecutorInterface):
+        # Temporarily override attempt for resource calculation if inherited
+        if self.inherited_attempt is not None:
+            original_attempt = job.attempt
+            self.logger.debug(
+                f"Using inherited attempt {self.inherited_attempt} for resource calculation "
+                f"(job reports attempt {original_attempt})"
+            )
+            job.attempt = self.inherited_attempt
+            job.reset_params_and_resources()
+        else:
+            original_attempt = None
+        
+        try:
+            self._run_job_impl(job)
+        finally:
+            # CRITICAL: Restore original attempt so Snakemake can track completion
+            if original_attempt is not None:
+                job.attempt = original_attempt
+                job.reset_params_and_resources()
+                self.logger.debug(f"Restored job attempt to {original_attempt}")
+    
+    def _run_job_impl(self, job: JobExecutorInterface):
         # Implement here how to run a job.
         # You can access the job's resources, etc.
         # via the job object.
