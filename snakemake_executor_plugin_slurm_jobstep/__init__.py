@@ -15,14 +15,7 @@ import re
 import zlib
 from dataclasses import dataclass, field
 
-from pathlib import Path
 from typing import cast
-
-from snakemake.io.flags.access_patterns import (
-    AccessPattern,
-    AccessPatternFactory,
-    STORE_KEY,
-)
 
 from snakemake.settings.types import StorageSettings
 
@@ -37,6 +30,14 @@ from snakemake_interface_executor_plugins.settings import (
     ExecutorSettingsBase,
 )
 from snakemake_interface_common.exceptions import WorkflowError
+
+from .stagein import (
+    expand_node_local_prefix,
+    should_stage_in,
+    get_file_size,
+    stage_in_sbcast,
+    stage_in_scp,
+)
 
 # Required:
 # Specify common settings shared by various executors.
@@ -60,91 +61,6 @@ common_settings = CommonSettings(
 )
 
 
-def should_stage_in(inputfile):
-    """
-    Determine whether an input file should be staged in based on its access pattern.
-    """
-    pattern = inputfile.flags.get(STORE_KEY)
-    return pattern in {AccessPattern.RANDOM, AccessPattern.MULTI}
-
-
-def get_file_size(inputfile):
-    """
-    Get the size of the input file if available, otherwise return None.
-    """
-    size = os.path.getsize(inputfile)
-    # return file size in GB - we do not care for the exact value
-    return size // (1024**3)
-
-
-def get_nodelist():
-    """
-    Get the list of nodes allocated for the job from SLURM environment variables
-    """
-    try:
-        expanded = subprocess.run(
-            ["scontrol", "show", "hostname", "$SLURM_NODELIST"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError) as err:
-        raise WorkflowError(
-            "Failed to expand SLURM nodelist via `scontrol show hostname`."
-        ) from err
-
-    return [host for host in expanded.stdout.splitlines() if host]
-
-
-def get_remote_storage_path():
-    """
-    Get the remote storage path from the environment variable set by Snakemake.
-    """
-    #TODO: This is bullshit - the remote storage path should be passed via
-    # the Snakemake API, just how?
-    pass
-
-
-def stage_in_sbcast(inpath) -> Path:
-    """
-    `sbcast` is a SLURM-build-in utitlity for staging files to the compute nodes.
-    It works on single files and best of files smaller 2GB.
-    It's signature is `sbcast <local_path> <remote_path>`,
-    where the remote path is expected to be on a shared filesystem,
-    but can be outside of the job's working directory.
-    The utility takes care of staging the file to the compute nodes and
-    placing it at the specified remote path.
-
-    Note: it expexts a full absolute input path and a full absolute remote path
-    """
-    remote_path = os.path.join(get_remote_storage_path(), os.path.basename(inpath))
-    try:
-        subprocess.run(
-            ["sbcast", inpath, remote_path],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError) as err:
-        raise WorkflowError(
-            f"Failed to stage in file {inpath} via sbcast to {remote_path}."
-        ) from err
-
-    return Path(remote_path)
-
-
-def stage_in_scp(inpath) -> Path:
-    """
-    `scp` is a standard utility for copying files over SSH. It can be used for staging files.
-    For `scp` to work, host based login via SSH must be set up between the submit host and the
-    compute nodes, and the remote path must be on a shared filesystem.
-    """
-    pass
-
-
-#  [(str(f), f.size()) for f in job.input]
-
-
 @dataclass
 class ExecutorSettings(ExecutorSettingsBase):
     """Settings for the SLURM jobstep executor plugin."""
@@ -158,6 +74,14 @@ class ExecutorSettings(ExecutorSettingsBase):
                 "call. Useful when a limit exists on SLURM command line length (ie. "
                 "max_submit_line_size). (internal use only)"
             ),
+            "env_var": False,
+            "required": False,
+        },
+    )
+    node_local_prefix: str = field(
+        default="",
+        metadata={
+            "help": ("Used to pass a path to a node local directory"),
             "env_var": False,
             "required": False,
         },
@@ -188,7 +112,15 @@ class Executor(RealExecutor):
         # is a job array task
         self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
         # print environment variables for debugging purposes
-        self.logger.debug(f"environment: {os.environ}")
+        # self.logger.debug(f"environment: {os.environ}")
+        self.logger.debug(f"Storage setting remote: {StorageSettings.__dict__}")
+        # check whether the remote path is present
+        if self.workflow.executor_settings.node_local_prefix:
+            expanded_prefix = expand_node_local_prefix(
+                self.workflow.executor_settings.node_local_prefix
+            )
+            self.logger.debug(f"Using node local prefix: {expanded_prefix}")
+            self.node_local_prefix = expanded_prefix
 
     @property
     def remote_storage_prefix(self) -> str | None:
@@ -221,12 +153,12 @@ class Executor(RealExecutor):
                     self.logger.debug(
                         f"Staging in {inputfile} via sbcast (size: {size} GB)"
                     )
-                    staged_path = stage_in_sbcast(inputfile)
+                    staged_path = stage_in_sbcast(inputfile, self.node_local_prefix)
                 else:
                     self.logger.debug(
                         f"Staging in {inputfile} via scp (size: {size} GB)"
                     )
-                    staged_path = stage_in_scp(inputfile)
+                    staged_path = stage_in_scp(inputfile, self.node_local_prefix)
                 # next we need to correct the job's input path to point to the staged file
                 job.input[n] = staged_path
 
