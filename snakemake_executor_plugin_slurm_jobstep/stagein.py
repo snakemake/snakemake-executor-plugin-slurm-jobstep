@@ -103,17 +103,23 @@ def stage_in_scp(inpath, remote_directory):
     """
     fname = Path(inpath).name
     remote_path = Path(remote_directory) / fname
-    try:
-        subprocess.run(
-            ["scp", inpath, f"{remote_path}"],
-            check=True,
+
+    nodelist = get_nodelist()
+    # we need to iterate over the nodelist and scp to each node, 
+    # as scp does not have a built-in way to copy to multiple hosts
+    for node in nodelist:
+        try:
+            subprocess.run(
+                ["scp", inpath, f"{node}:{remote_path}"],
+                check=True,
             capture_output=True,
-            text=True,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError) as err:
-        raise WorkflowError(
-            f"Failed to stage in file {inpath} via scp to {remote_path}."
-        ) from err
+                text=True,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError) as err:
+            raise WorkflowError(
+                f"Failed to stage in file {inpath} via scp to {remote_path}."
+            ) from err
+
     try:
         staged_path = inpath.__class__(
             str(remote_path), rule=getattr(inpath, "rule", None)
@@ -124,5 +130,3 @@ def stage_in_scp(inpath, remote_directory):
     except Exception:
         return str(remote_path)
 
-
-#  [(str(f), f.size()) for f in job.input]
