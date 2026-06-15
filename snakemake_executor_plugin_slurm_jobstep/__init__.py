@@ -159,7 +159,8 @@ class Executor(RealExecutor):
                         f"Staging in {inputfile} via scp (size: {size} GB)"
                     )
                     staged_path = stage_in_scp(inputfile, self.node_local_prefix)
-                # next we need to correct the job's input path to point to the staged file
+                # next we need to correct the job's input path to point to the
+                # staged file
                 job.input[n] = staged_path
 
         jobsteps = dict()
