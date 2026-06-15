@@ -97,8 +97,9 @@ def stage_in_sbcast(inpath, remote_directory):
 
 def stage_in_scp(inpath, remote_directory):
     """
-    `scp` is a standard utility for copying files over SSH. It can be used for staging files.
-    For `scp` to work, host based login via SSH must be set up between the submit host and the
+    `scp` is a standard utility for copying files over SSH. It can be used for
+    staging-in files. For `scp` to work, host based login via SSH or passphrase
+    based login must be set up between the submit host and the
     compute nodes, and the remote path must be on a shared filesystem.
     """
     fname = Path(inpath).name
