@@ -118,7 +118,8 @@ def get_nodename():
     nodename = os.environ.get("SLURMD_NODENAME")
     if nodename is None:
         raise WorkflowError(
-            "Failed to get current node name from SLURM environment variable SLURMD_NODENAME."
+            "Failed to get current node name from SLURM environment "
+            "variable SLURMD_NODENAME."
         )
     return nodename
 
@@ -138,7 +139,8 @@ def stage_in_scp(inpath, remote_directory):
     # as scp does not have a built-in way to copy to multiple hosts
     for node in nodelist:
         if node == get_nodename():
-            # if the node is the same as the current node, we can just copy the file locally
+            # if the node is the same as the current node, we can just 
+            # copy the file locally
             try:
                 subprocess.run(
                     ["cp", inpath, str(remote_path)],

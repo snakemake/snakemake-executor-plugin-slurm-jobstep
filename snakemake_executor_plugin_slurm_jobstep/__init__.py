@@ -153,9 +153,11 @@ class Executor(RealExecutor):
                 if size is not None and size > check_filesystem_availability(
                     self.node_local_prefix
                 ):
+                    available = check_filesystem_availability(self.node_local_prefix)
                     raise WorkflowError(
-                        f"Not enough available space on filesystem for staging in {inputfile} "
-                        f"(size: {size} GB, available: {check_filesystem_availability(self.node_local_prefix)} GB)."
+                        "Not enough available space on filesystem for "
+                        f"staging in {inputfile} (size: {size} GB, "
+                        f"available: {available} GB)."
                     )
                 if size is not None and size <= 4:
                     self.logger.debug(
