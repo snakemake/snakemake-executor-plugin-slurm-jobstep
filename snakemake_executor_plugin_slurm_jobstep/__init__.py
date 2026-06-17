@@ -157,7 +157,7 @@ class Executor(RealExecutor):
                         f"Not enough available space on filesystem for staging in {inputfile} "
                         f"(size: {size} GB, available: {check_filesystem_availability(self.node_local_prefix)} GB)."
                     )
-                if size is not None and size < 2:
+                if size is not None and size <= 4:
                     self.logger.debug(
                         f"Staging in {inputfile} via sbcast (size: {size} GB)"
                     )
