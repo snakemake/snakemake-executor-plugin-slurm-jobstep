@@ -40,9 +40,10 @@ def get_nodelist():
     """
     Get the list of nodes allocated for the job from SLURM environment variables
     """
+    evaluate_nodelist = os.environ.get("SLURM_NODELIST")
     try:
         expanded = subprocess.run(
-            ["scontrol", "show", "hostname", "$SLURM_NODELIST"],
+            ["scontrol", "show", "hostname", evaluate_nodelist],
             check=True,
             capture_output=True,
             text=True,
@@ -53,6 +54,21 @@ def get_nodelist():
         ) from err
 
     return [host for host in expanded.stdout.splitlines() if host]
+
+
+def check_filesystem_availability(remote_directory):
+    """
+    Check the available size on the filesystem where the remote directory is located.
+    """
+    try:
+        statvfs = os.statvfs(remote_directory)
+        # Calculate available space in GB
+        available_gb = (statvfs.f_bavail * statvfs.f_frsize) // (1024**3)
+        return available_gb
+    except OSError as err:
+        raise WorkflowError(
+            f"Failed to check filesystem for remote directory {remote_directory}."
+        ) from err
 
 
 def stage_in_sbcast(inpath, remote_directory):
@@ -95,6 +111,18 @@ def stage_in_sbcast(inpath, remote_directory):
         return str(remote_path)
 
 
+def get_nodename():
+    """
+    Get the name of the current node from SLURM environment variables.
+    """
+    nodename = os.environ.get("SLURMD_NODENAME")
+    if nodename is None:
+        raise WorkflowError(
+            "Failed to get current node name from SLURM environment variable SLURMD_NODENAME."
+        )
+    return nodename
+
+
 def stage_in_scp(inpath, remote_directory):
     """
     `scp` is a standard utility for copying files over SSH. It can be used for
@@ -109,6 +137,20 @@ def stage_in_scp(inpath, remote_directory):
     # we need to iterate over the nodelist and scp to each node,
     # as scp does not have a built-in way to copy to multiple hosts
     for node in nodelist:
+        if node == get_nodename():
+            # if the node is the same as the current node, we can just copy the file locally
+            try:
+                subprocess.run(
+                    ["cp", inpath, str(remote_path)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except (subprocess.CalledProcessError, FileNotFoundError) as err:
+                raise WorkflowError(
+                    f"Failed to stage in file {inpath} via local copy to {remote_path}."
+                ) from err
+            continue
         try:
             subprocess.run(
                 ["scp", inpath, f"{node}:{remote_path}"],

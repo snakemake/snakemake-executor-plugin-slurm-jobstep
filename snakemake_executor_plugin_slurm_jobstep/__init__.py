@@ -35,6 +35,7 @@ from .stagein import (
     expand_node_local_prefix,
     should_stage_in,
     get_file_size,
+    check_filesystem_availability,
     stage_in_sbcast,
     stage_in_scp,
 )
@@ -149,6 +150,13 @@ class Executor(RealExecutor):
             if should_stage_in(inputfile):
                 # if the file size is < 2GB, we use sbcast, otherwise scp
                 size = get_file_size(inputfile)
+                if size is not None and size > check_filesystem_availability(
+                    self.node_local_prefix
+                ):
+                    raise WorkflowError(
+                        f"Not enough available space on filesystem for staging in {inputfile} "
+                        f"(size: {size} GB, available: {check_filesystem_availability(self.node_local_prefix)} GB)."
+                    )
                 if size is not None and size < 2:
                     self.logger.debug(
                         f"Staging in {inputfile} via sbcast (size: {size} GB)"
