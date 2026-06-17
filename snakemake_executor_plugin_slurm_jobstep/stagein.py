@@ -139,7 +139,7 @@ def stage_in_scp(inpath, remote_directory):
     # as scp does not have a built-in way to copy to multiple hosts
     for node in nodelist:
         if node == get_nodename():
-            # if the node is the same as the current node, we can just 
+            # if the node is the same as the current node, we can just
             # copy the file locally
             try:
                 subprocess.run(
