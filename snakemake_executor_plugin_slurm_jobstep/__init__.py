@@ -33,7 +33,7 @@ from snakemake_interface_common.exceptions import WorkflowError
 
 from .stagein import (
     expand_node_local_prefix,
-    should_stage_in,
+    is_ondemand_eligible,
     get_file_size,
     check_filesystem_availability,
     stage_in_sbcast,
@@ -146,8 +146,8 @@ class Executor(RealExecutor):
             self.logger.debug(
                 f"Checking input file {inputfile} with flags {inputfile.flags}"
             )
-            self.logger.debug(f"should_stage_in: {should_stage_in(inputfile)}")
-            if should_stage_in(inputfile):
+            self.logger.debug(f"is_ondemand_eligible: {is_ondemand_eligible(inputfile)}")
+            if is_ondemand_eligible(inputfile):
                 # if the file size is < 2GB, we use sbcast, otherwise scp
                 size = get_file_size(inputfile)
                 if size is not None and size > check_filesystem_availability(

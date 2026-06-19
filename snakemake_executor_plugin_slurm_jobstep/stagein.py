@@ -19,7 +19,7 @@ def expand_node_local_prefix(value: str) -> str:
     return _ENV_MARKER.sub(repl, value)
 
 
-def should_stage_in(inputfile):
+def is_ondemand_eligible(inputfile):
     """
     Determine whether an input file should be staged in based on its access pattern.
     """
