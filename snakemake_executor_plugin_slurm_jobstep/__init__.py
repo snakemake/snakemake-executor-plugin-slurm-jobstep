@@ -146,7 +146,8 @@ class Executor(RealExecutor):
             self.logger.debug(
                 f"Checking input file {inputfile} with flags {inputfile.flags}"
             )
-            self.logger.debug(f"is_ondemand_eligible: {is_ondemand_eligible(inputfile)}")
+            self.logger.debug("is_ondemand_eligible: "
+                              f"{is_ondemand_eligible(inputfile)}")
             if is_ondemand_eligible(inputfile):
                 # if the file size is < 2GB, we use sbcast, otherwise scp
                 size = get_file_size(inputfile)
