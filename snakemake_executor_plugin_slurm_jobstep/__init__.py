@@ -15,7 +15,7 @@ import re
 import zlib
 from dataclasses import dataclass, field
 
-from typing import cast
+from typing import cast, Optional
 
 from snakemake.settings.types import StorageSettings
 
@@ -79,8 +79,8 @@ class ExecutorSettings(ExecutorSettingsBase):
             "required": False,
         },
     )
-    node_local_prefix: str = field(
-        default="",
+    node_local_prefix: Optional[str] = field(
+        default=None,
         metadata={
             "help": ("Used to pass a path to a node local directory"),
             "env_var": False,
