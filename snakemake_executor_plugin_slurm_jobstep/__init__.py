@@ -216,6 +216,7 @@ class Executor(RealExecutor):
             "SLURM_CLUSTER_NAME",
             "SLURM_SUBMIT_DIR",
             "SLURM_SUBMIT_HOST",
+            "SLURM_CONF",
         }
         for var in list(popen_env):
             if var.startswith("SLURM_") and var not in keep_slurm:
