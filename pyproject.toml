@@ -22,7 +22,6 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
 ]
-]
 keywords = ["snakemake", "plugin", "executor", "cluster", "slurm"]
 dependencies = [
     "snakemake-interface-common>=1.23.0,<2",
