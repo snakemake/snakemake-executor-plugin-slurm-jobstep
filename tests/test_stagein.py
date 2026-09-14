@@ -1,3 +1,4 @@
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -42,4 +43,18 @@ def test_get_nodelist_raises_when_scontrol_returns_no_hosts(monkeypatch):
         lambda *args, **kwargs: SimpleNamespace(stdout="\n"),
     )
     with pytest.raises(WorkflowError, match="no nodes were returned"):
+        get_nodelist()
+
+
+def test_get_nodelist_raises_when_scontrol_fails(monkeypatch):
+    monkeypatch.setenv("SLURM_NODELIST", "compute[01-02]")
+
+    def fail(*args, **kwargs):
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=args[0],
+        )
+
+    monkeypatch.setattr(stagein.subprocess, "run", fail)
+    with pytest.raises(WorkflowError, match="Failed to expand SLURM nodelist"):
         get_nodelist()

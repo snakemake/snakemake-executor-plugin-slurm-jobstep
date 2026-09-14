@@ -85,6 +85,25 @@ def check_filesystem_availability(remote_directory):
         ) from err
 
 
+def ensure_stage_in_directory(remote_directory, remote_host=None):
+    directory = Path(remote_directory)
+    if remote_host is None:
+        directory.mkdir(parents=True, exist_ok=True)
+        return
+
+    try:
+        subprocess.run(
+            ["ssh", remote_host, "mkdir", "-p", str(directory)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError) as err:
+        raise WorkflowError(
+            f"Failed to create stage-in directory {remote_directory} on {remote_host}."
+        ) from err
+
+
 def stage_in_sbcast(inpath, remote_directory):
     """
     `sbcast` is a SLURM built-in utility for staging files to the compute nodes.
@@ -101,6 +120,7 @@ def stage_in_sbcast(inpath, remote_directory):
     # remote directory.
 
     fname = Path(inpath).name
+    ensure_stage_in_directory(remote_directory)
     remote_path = Path(remote_directory) / fname
     try:
         subprocess.run(
@@ -155,6 +175,7 @@ def stage_in_scp(inpath, remote_directory):
         if node == get_nodename():
             # if the node is the same as the current node, we can just
             # copy the file locally
+            ensure_stage_in_directory(remote_directory)
             try:
                 subprocess.run(
                     ["cp", inpath, str(remote_path)],
@@ -167,6 +188,7 @@ def stage_in_scp(inpath, remote_directory):
                     f"Failed to stage in file {inpath} via local copy to {remote_path}."
                 ) from err
             continue
+        ensure_stage_in_directory(remote_directory, remote_host=node)
         try:
             subprocess.run(
                 ["scp", inpath, f"{node}:{remote_path}"],

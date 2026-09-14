@@ -14,6 +14,7 @@ import ast
 import re
 import zlib
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from typing import cast, Optional
 
@@ -152,6 +153,7 @@ class Executor(RealExecutor):
             if is_ondemand_eligible(inputfile) and self.node_local_prefix:
                 # if the file size is < 2GB, we use sbcast, otherwise scp
                 size = get_file_size(inputfile)
+                Path(self.node_local_prefix).mkdir(parents=True, exist_ok=True)
                 available = None
                 if size is not None:
                     available = check_filesystem_availability(self.node_local_prefix)
