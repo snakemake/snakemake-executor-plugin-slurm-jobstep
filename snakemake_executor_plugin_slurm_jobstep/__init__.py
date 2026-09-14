@@ -144,6 +144,7 @@ class Executor(RealExecutor):
         # with job_info being of type
         # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
 
+        remaining_stage_in_space = None
         for n, inputfile in enumerate(job.input):
             self.logger.debug(
                 f"Checking input file {inputfile} with flags {inputfile.flags}"
@@ -154,14 +155,15 @@ class Executor(RealExecutor):
                 # if the file size is < 2GB, we use sbcast, otherwise scp
                 size = get_file_size(inputfile)
                 Path(self.node_local_prefix).mkdir(parents=True, exist_ok=True)
-                available = None
-                if size is not None:
-                    available = check_filesystem_availability(self.node_local_prefix)
-                if size is not None and size > available:
+                if remaining_stage_in_space is None:
+                    remaining_stage_in_space = check_filesystem_availability(
+                        self.node_local_prefix
+                    )
+                if size is not None and size > remaining_stage_in_space:
                     raise WorkflowError(
                         "Not enough available space on filesystem for "
                         f"staging in {inputfile} (size: {size} bytes, "
-                        f"available: {available} bytes)."
+                        f"available: {remaining_stage_in_space} bytes)."
                     )
                 if size is not None and size <= 4 * 1024**3:
                     self.logger.debug(
@@ -173,6 +175,8 @@ class Executor(RealExecutor):
                         f"Staging in {inputfile} via scp (size: {size} bytes)"
                     )
                     staged_path = stage_in_scp(inputfile, self.node_local_prefix)
+                if size is not None:
+                    remaining_stage_in_space -= size
                 # next we need to correct the job's input path to point to the
                 # staged file
                 job.input[n] = staged_path
