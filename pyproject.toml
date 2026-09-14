@@ -65,7 +65,7 @@ snakemake = ">=9.21.0,<10"
 
 [tool.pixi.feature.test.tasks]
 test = { cmd = "pytest", default-environment = "test" }
-coverage-report = { cmd = "coverage run -m pytest tests/tests.py && coverage report -m", default-environment = "test" }
+coverage-report = { cmd = "coverage run -m pytest && coverage report -m", default-environment = "test" }
 
 [tool.pixi.feature.style.pypi-dependencies]
 ruff  = ">=0.10.0,<0.11"

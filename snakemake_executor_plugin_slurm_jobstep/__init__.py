@@ -114,7 +114,8 @@ class Executor(RealExecutor):
         self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
         # print environment variables for debugging purposes
         # self.logger.debug(f"environment: {os.environ}")
-        self.logger.debug(f"Storage setting remote: {StorageSettings.__dict__}")
+        self.logger.debug(f"Storage settings: {self.workflow.storage_settings}")
+        self.node_local_prefix = None
         # check whether the remote path is present
         if self.workflow.executor_settings.node_local_prefix:
             expanded_prefix = expand_node_local_prefix(
@@ -148,7 +149,7 @@ class Executor(RealExecutor):
             )
             self.logger.debug("is_ondemand_eligible: "
                               f"{is_ondemand_eligible(inputfile)}")
-            if is_ondemand_eligible(inputfile):
+            if is_ondemand_eligible(inputfile) and self.node_local_prefix:
                 # if the file size is < 2GB, we use sbcast, otherwise scp
                 size = get_file_size(inputfile)
                 if size is not None and size > check_filesystem_availability(
@@ -173,6 +174,11 @@ class Executor(RealExecutor):
                 # next we need to correct the job's input path to point to the
                 # staged file
                 job.input[n] = staged_path
+            elif is_ondemand_eligible(inputfile):
+                self.logger.debug(
+                    "Skipping stage-in for on-demand eligible input because no "
+                    "node_local_prefix is configured."
+                )
 
         jobsteps = dict()
         call = None
