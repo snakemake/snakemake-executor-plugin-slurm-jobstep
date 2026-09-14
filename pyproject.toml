@@ -36,6 +36,9 @@ Documentation = "https://snakemake.github.io/snakemake-plugin-catalog/plugins/ex
 skip = ".git,*.pdf,*.svg,versioneer.py,*.css,test_*"
 check-hidden = true
 
+[tool.ruff.lint.per-file-ignores]
+"tests/tests.py" = ["E402"]
+
 [tool.coverage.run]
 omit = [".*", "*/site-packages/*", "Snakefile"]
 
