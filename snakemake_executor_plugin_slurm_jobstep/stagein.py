@@ -37,9 +37,7 @@ def get_file_size(inputfile):
     """
     Get the size of the input file if available, otherwise return None.
     """
-    size = os.path.getsize(inputfile)
-    # return file size in GB - we do not care for the exact value
-    return size // (1024**3)
+    return os.path.getsize(inputfile)
 
 
 def get_nodelist():
@@ -64,7 +62,14 @@ def get_nodelist():
             "Failed to expand SLURM nodelist via `scontrol show hostname`."
         ) from err
 
-    return [host for host in expanded.stdout.splitlines() if host]
+    hosts = [host for host in expanded.stdout.splitlines() if host]
+    if not hosts:
+        raise WorkflowError(
+            "Failed to expand SLURM nodelist via `scontrol show hostname`: "
+            "no nodes were returned."
+        )
+
+    return hosts
 
 
 def check_filesystem_availability(remote_directory):
@@ -73,9 +78,7 @@ def check_filesystem_availability(remote_directory):
     """
     try:
         statvfs = os.statvfs(remote_directory)
-        # Calculate available space in GB
-        available_gb = (statvfs.f_bavail * statvfs.f_frsize) // (1024**3)
-        return available_gb
+        return statvfs.f_bavail * statvfs.f_frsize
     except OSError as err:
         raise WorkflowError(
             f"Failed to check filesystem for remote directory {remote_directory}."

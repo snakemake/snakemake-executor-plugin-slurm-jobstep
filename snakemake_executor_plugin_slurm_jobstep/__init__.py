@@ -158,17 +158,17 @@ class Executor(RealExecutor):
                 if size is not None and size > available:
                     raise WorkflowError(
                         "Not enough available space on filesystem for "
-                        f"staging in {inputfile} (size: {size} GB, "
-                        f"available: {available} GB)."
+                        f"staging in {inputfile} (size: {size} bytes, "
+                        f"available: {available} bytes)."
                     )
-                if size is not None and size <= 4:
+                if size is not None and size <= 4 * 1024**3:
                     self.logger.debug(
-                        f"Staging in {inputfile} via sbcast (size: {size} GB)"
+                        f"Staging in {inputfile} via sbcast (size: {size} bytes)"
                     )
                     staged_path = stage_in_sbcast(inputfile, self.node_local_prefix)
                 else:
                     self.logger.debug(
-                        f"Staging in {inputfile} via scp (size: {size} GB)"
+                        f"Staging in {inputfile} via scp (size: {size} bytes)"
                     )
                     staged_path = stage_in_scp(inputfile, self.node_local_prefix)
                 # next we need to correct the job's input path to point to the

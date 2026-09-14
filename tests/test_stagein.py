@@ -1,6 +1,9 @@
+from types import SimpleNamespace
+
 import pytest
 from snakemake_interface_common.exceptions import WorkflowError
 
+import snakemake_executor_plugin_slurm_jobstep.stagein as stagein
 from snakemake_executor_plugin_slurm_jobstep.stagein import (
     expand_node_local_prefix,
     get_nodelist,
@@ -28,4 +31,15 @@ def test_expand_node_local_prefix_raises_for_missing_env_marker(monkeypatch):
 def test_get_nodelist_raises_when_slurm_nodelist_missing(monkeypatch):
     monkeypatch.delenv("SLURM_NODELIST", raising=False)
     with pytest.raises(WorkflowError, match="SLURM_NODELIST"):
+        get_nodelist()
+
+
+def test_get_nodelist_raises_when_scontrol_returns_no_hosts(monkeypatch):
+    monkeypatch.setenv("SLURM_NODELIST", "compute[01-02]")
+    monkeypatch.setattr(
+        stagein.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(stdout="\n"),
+    )
+    with pytest.raises(WorkflowError, match="no nodes were returned"):
         get_nodelist()
