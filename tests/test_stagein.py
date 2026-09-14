@@ -29,8 +29,20 @@ def test_expand_node_local_prefix_raises_for_missing_env_marker(monkeypatch):
         expand_node_local_prefix("/localscratch/__ENV_SLURM_JOB_ID__/run")
 
 
+def test_expand_node_local_prefix_raises_for_empty_env_marker(monkeypatch):
+    monkeypatch.setenv("SLURM_JOB_ID", "")
+    with pytest.raises(WorkflowError, match="SLURM_JOB_ID is not set"):
+        expand_node_local_prefix("/localscratch/__ENV_SLURM_JOB_ID__/run")
+
+
 def test_get_nodelist_raises_when_slurm_nodelist_missing(monkeypatch):
     monkeypatch.delenv("SLURM_NODELIST", raising=False)
+    with pytest.raises(WorkflowError, match="SLURM_NODELIST"):
+        get_nodelist()
+
+
+def test_get_nodelist_raises_when_slurm_nodelist_empty(monkeypatch):
+    monkeypatch.setenv("SLURM_NODELIST", "")
     with pytest.raises(WorkflowError, match="SLURM_NODELIST"):
         get_nodelist()
 
@@ -58,3 +70,9 @@ def test_get_nodelist_raises_when_scontrol_fails(monkeypatch):
     monkeypatch.setattr(stagein.subprocess, "run", fail)
     with pytest.raises(WorkflowError, match="Failed to expand SLURM nodelist"):
         get_nodelist()
+
+
+def test_get_nodename_raises_when_empty(monkeypatch):
+    monkeypatch.setenv("SLURMD_NODENAME", "")
+    with pytest.raises(WorkflowError, match="SLURMD_NODENAME"):
+        stagein.get_nodename()

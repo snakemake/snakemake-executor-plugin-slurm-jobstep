@@ -16,7 +16,7 @@ def expand_node_local_prefix(value: str) -> str:
     def repl(match: re.Match[str]) -> str:
         env_var = match.group(1)
         env_value = os.environ.get(env_var)
-        if env_value is None:
+        if not env_value:
             raise WorkflowError(
                 f"Failed to expand node local prefix because {env_var} is not set."
             )
@@ -45,7 +45,7 @@ def get_nodelist():
     Get the list of nodes allocated for the job from SLURM environment variables
     """
     evaluate_nodelist = os.environ.get("SLURM_NODELIST")
-    if evaluate_nodelist is None:
+    if not evaluate_nodelist:
         raise WorkflowError(
             "Failed to get allocated nodes from SLURM environment variable "
             "SLURM_NODELIST."
@@ -150,7 +150,7 @@ def get_nodename():
     Get the name of the current node from SLURM environment variables.
     """
     nodename = os.environ.get("SLURMD_NODENAME")
-    if nodename is None:
+    if not nodename:
         raise WorkflowError(
             "Failed to get current node name from SLURM environment "
             "variable SLURMD_NODENAME."
