@@ -152,10 +152,10 @@ class Executor(RealExecutor):
             if is_ondemand_eligible(inputfile) and self.node_local_prefix:
                 # if the file size is < 2GB, we use sbcast, otherwise scp
                 size = get_file_size(inputfile)
-                if size is not None and size > check_filesystem_availability(
-                    self.node_local_prefix
-                ):
+                available = None
+                if size is not None:
                     available = check_filesystem_availability(self.node_local_prefix)
+                if size is not None and size > available:
                     raise WorkflowError(
                         "Not enough available space on filesystem for "
                         f"staging in {inputfile} (size: {size} GB, "

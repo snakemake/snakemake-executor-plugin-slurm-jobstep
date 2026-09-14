@@ -14,7 +14,13 @@ _ENV_MARKER = re.compile(r"__ENV(?:__|_)([A-Z0-9]+(?:_[A-Z0-9]+)*)__")
 
 def expand_node_local_prefix(value: str) -> str:
     def repl(match: re.Match[str]) -> str:
-        return os.environ.get(match.group(1), "")
+        env_var = match.group(1)
+        env_value = os.environ.get(env_var)
+        if env_value is None:
+            raise WorkflowError(
+                f"Failed to expand node local prefix because {env_var} is not set."
+            )
+        return env_value
 
     return _ENV_MARKER.sub(repl, value)
 
@@ -41,6 +47,11 @@ def get_nodelist():
     Get the list of nodes allocated for the job from SLURM environment variables
     """
     evaluate_nodelist = os.environ.get("SLURM_NODELIST")
+    if evaluate_nodelist is None:
+        raise WorkflowError(
+            "Failed to get allocated nodes from SLURM environment variable "
+            "SLURM_NODELIST."
+        )
     try:
         expanded = subprocess.run(
             ["scontrol", "show", "hostname", evaluate_nodelist],
@@ -73,15 +84,15 @@ def check_filesystem_availability(remote_directory):
 
 def stage_in_sbcast(inpath, remote_directory):
     """
-    `sbcast` is a SLURM-build-in utitlity for staging files to the compute nodes.
-    It works on single files and best of files smaller 2GB.
+    `sbcast` is a SLURM built-in utility for staging files to the compute nodes.
+    It works on single files and is best for files smaller 2GB.
     It's signature is `sbcast <local_path> <remote_path>`,
     where the remote path is expected to be on a shared filesystem,
     but can be outside of the job's working directory.
     The utility takes care of staging the file to the compute nodes and
     placing it at the specified remote path.
 
-    Note: it expexts a full absolute input path and a full absolute remote path
+    Note: it expects a full absolute input path and a full absolute remote path
     """
     # The remote path is combined from the input file name and the
     # remote directory.
