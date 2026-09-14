@@ -33,6 +33,10 @@ dependencies = [
 Repository = "https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep"
 Documentation = "https://snakemake.github.io/snakemake-plugin-catalog/plugins/executor/slurm-jobstep.html"
 
+[tool.codespell]
+skip = ".git,*.pdf,*.svg,versioneer.py,*.css,test_*"
+check-hidden = true
+
 [tool.coverage.run]
 omit = [".*", "*/site-packages/*", "Snakefile"]
 
