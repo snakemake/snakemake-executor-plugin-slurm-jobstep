@@ -123,9 +123,9 @@ class Executor(RealExecutor):
                 self.workflow.executor_settings.node_local_prefix
             ).decode("utf-8")
             expanded_prefix = os.path.expandvars(decoded_prefix)
-            #expanded_prefix = expand_node_local_prefix(
+            # expanded_prefix = expand_node_local_prefix(
             #    self.workflow.executor_settings.node_local_prefix
-            #)
+            # )
             self.logger.debug(f"Using node local prefix: {expanded_prefix}")
             self.node_local_prefix = expanded_prefix
             # we check the existence of this directory on all nodes only once:
@@ -148,14 +148,15 @@ class Executor(RealExecutor):
         # After submitting the job, you have to call
         # self.report_job_submission(job_info).
         # with job_info being of type
-        # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.        
+        # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
 
         for n, inputfile in enumerate(job.input):
             self.logger.debug(
                 f"Checking input file {inputfile} with flags {inputfile.flags}"
             )
-            self.logger.debug("is_ondemand_eligible: "
-                              f"{is_ondemand_eligible(inputfile)}")
+            self.logger.debug(
+                f"is_ondemand_eligible: {is_ondemand_eligible(inputfile)}"
+            )
             if is_ondemand_eligible(inputfile):
                 # if the file size is < 2GB, we use sbcast, otherwise scp
                 size = get_file_size(inputfile)
@@ -179,7 +180,9 @@ class Executor(RealExecutor):
                     )
                     staged_path = stage_in_scp(inputfile, self.node_local_prefix)
                 if size is not None:
-                    remaining_stage_in_space = get_file_system_size(self.node_local_prefix)
+                    remaining_stage_in_space = get_file_system_size(
+                        self.node_local_prefix
+                    )
                     remaining_stage_in_space -= size
                 # next we need to correct the job's input path to point to the
                 # staged file

@@ -66,6 +66,7 @@ def check_filesystem_availability(remote_directory):
             f"Failed to check filesystem for remote directory {remote_directory}."
         ) from err
 
+
 def ensure_stage_in_directory(remote_directory):
     """
     Ensure that the stage-in directory exists on the remote hosts.
@@ -95,6 +96,7 @@ def ensure_stage_in_directory(remote_directory):
                 f"Failed to find stage-in directory {remote_directory} on {node}."
             ) from err
 
+
 def get_file_system_size(path):
     """
     Get the available size of the filesystem where the path is located in GB.
@@ -104,9 +106,8 @@ def get_file_system_size(path):
         available_bytes = statvfs.f_bavail * statvfs.f_frsize
         return round(available_bytes / (1024**3), 2)
     except OSError as err:
-        raise WorkflowError(
-            f"Failed to check filesystem for path {path}."
-        ) from err
+        raise WorkflowError(f"Failed to check filesystem for path {path}.") from err
+
 
 def stage_in_sbcast(inpath, remote_directory):
     """
@@ -172,7 +173,7 @@ def stage_in_scp(inpath, remote_directory):
     remote_path = Path(remote_directory) / fname
 
     nodelist = get_nodelist()
-    
+
     # we need to iterate over the nodelist and scp to each node,
     # as scp does not have a built-in way to copy to multiple hosts
     for node in nodelist:
