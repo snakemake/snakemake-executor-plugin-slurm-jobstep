@@ -157,7 +157,7 @@ class Executor(RealExecutor):
             self.logger.debug(
                 f"is_ondemand_eligible: {is_ondemand_eligible(inputfile)}"
             )
-            if is_ondemand_eligible(inputfile):
+            if self.node_local_prefix and is_ondemand_eligible(inputfile):
                 # if the file size is < 2GB, we use sbcast, otherwise scp
                 size = get_file_size(inputfile)
                 if size is not None and size > check_filesystem_availability(
