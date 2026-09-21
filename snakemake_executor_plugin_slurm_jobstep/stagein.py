@@ -9,15 +9,6 @@ from snakemake.io.flags.access_patterns import (
 )
 from snakemake_interface_common.exceptions import WorkflowError
 
-_ENV_MARKER = re.compile(r"__ENV(?:__|_)([A-Z0-9]+(?:_[A-Z0-9]+)*)__")
-
-
-def expand_node_local_prefix(value: str) -> str:
-    def repl(match: re.Match[str]) -> str:
-        return os.environ.get(match.group(1), "")
-
-    return _ENV_MARKER.sub(repl, value)
-
 
 def is_ondemand_eligible(inputfile):
     """
@@ -31,9 +22,7 @@ def get_file_size(inputfile):
     """
     Get the size of the input file if available, otherwise return None.
     """
-    size = os.path.getsize(inputfile)
-    # return file size in GB - we do not care for the exact value
-    return size // (1024**3)
+    return os.path.getsize(inputfile)
 
 
 def get_nodelist():
@@ -41,6 +30,8 @@ def get_nodelist():
     Get the list of nodes allocated for the job from SLURM environment variables
     """
     evaluate_nodelist = os.environ.get("SLURM_NODELIST")
+    if not evaluate_nodelist:
+        raise WorkflowError("unable to get 'SLURM_NODELIST'")
     try:
         expanded = subprocess.run(
             ["scontrol", "show", "hostname", evaluate_nodelist],
@@ -53,7 +44,14 @@ def get_nodelist():
             "Failed to expand SLURM nodelist via `scontrol show hostname`."
         ) from err
 
-    return [host for host in expanded.stdout.splitlines() if host]
+    hosts = [host for host in expanded.stdout.splitlines() if host]
+    if not hosts:
+        raise WorkflowError(
+            "Failed to expand SLURM nodelist via `scontrol show hostname`: "
+            "no nodes were returned."
+        )
+
+    return hosts
 
 
 def check_filesystem_availability(remote_directory):
@@ -62,26 +60,65 @@ def check_filesystem_availability(remote_directory):
     """
     try:
         statvfs = os.statvfs(remote_directory)
-        # Calculate available space in GB
-        available_gb = (statvfs.f_bavail * statvfs.f_frsize) // (1024**3)
-        return available_gb
+        return statvfs.f_bavail * statvfs.f_frsize
     except OSError as err:
         raise WorkflowError(
             f"Failed to check filesystem for remote directory {remote_directory}."
         ) from err
 
+def ensure_stage_in_directory(remote_directory):
+    """
+    Ensure that the stage-in directory exists on the remote hosts.
+    If it does not exist, the job will fail.
+    """
+    nodelist = get_nodelist()
+    directory = Path(remote_directory)
+
+    for node in nodelist:
+        if node == get_nodename():
+            # if the node is the same as the current node, we can just
+            # check the directory locally
+            if not directory.exists():
+                raise WorkflowError(
+                    f"Failed to find stage-in directory {remote_directory} on {node}."
+                )
+            continue
+        try:
+            subprocess.run(
+                ["ssh", node, "ls", directory.as_posix()],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError) as err:
+            raise WorkflowError(
+                f"Failed to find stage-in directory {remote_directory} on {node}."
+            ) from err
+
+def get_file_system_size(path):
+    """
+    Get the available size of the filesystem where the path is located in GB.
+    """
+    try:
+        statvfs = os.statvfs(path)
+        available_bytes = statvfs.f_bavail * statvfs.f_frsize
+        return round(available_bytes / (1024**3), 2)
+    except OSError as err:
+        raise WorkflowError(
+            f"Failed to check filesystem for path {path}."
+        ) from err
 
 def stage_in_sbcast(inpath, remote_directory):
     """
-    `sbcast` is a SLURM-build-in utitlity for staging files to the compute nodes.
-    It works on single files and best of files smaller 2GB.
+    `sbcast` is a SLURM built-in utility for staging files to the compute nodes.
+    It works on single files and is best for files smaller 2GB.
     It's signature is `sbcast <local_path> <remote_path>`,
     where the remote path is expected to be on a shared filesystem,
     but can be outside of the job's working directory.
     The utility takes care of staging the file to the compute nodes and
     placing it at the specified remote path.
 
-    Note: it expexts a full absolute input path and a full absolute remote path
+    Note: it expects a full absolute input path and a full absolute remote path
     """
     # The remote path is combined from the input file name and the
     # remote directory.
@@ -116,7 +153,7 @@ def get_nodename():
     Get the name of the current node from SLURM environment variables.
     """
     nodename = os.environ.get("SLURMD_NODENAME")
-    if nodename is None:
+    if not nodename:
         raise WorkflowError(
             "Failed to get current node name from SLURM environment "
             "variable SLURMD_NODENAME."
@@ -135,6 +172,7 @@ def stage_in_scp(inpath, remote_directory):
     remote_path = Path(remote_directory) / fname
 
     nodelist = get_nodelist()
+    
     # we need to iterate over the nodelist and scp to each node,
     # as scp does not have a built-in way to copy to multiple hosts
     for node in nodelist:
@@ -153,17 +191,18 @@ def stage_in_scp(inpath, remote_directory):
                     f"Failed to stage in file {inpath} via local copy to {remote_path}."
                 ) from err
             continue
-        try:
-            subprocess.run(
-                ["scp", inpath, f"{node}:{remote_path}"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError) as err:
-            raise WorkflowError(
-                f"Failed to stage in file {inpath} via scp to {remote_path}."
-            ) from err
+        else:
+            try:
+                subprocess.run(
+                    ["scp", inpath, f"{node}:{remote_path}"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except (subprocess.CalledProcessError, FileNotFoundError) as err:
+                raise WorkflowError(
+                    f"Failed to stage in file {inpath} via scp to {remote_path}."
+                ) from err
 
     try:
         staged_path = inpath.__class__(

@@ -32,7 +32,8 @@ from snakemake_interface_executor_plugins.settings import (
 from snakemake_interface_common.exceptions import WorkflowError
 
 from .stagein import (
-    expand_node_local_prefix,
+    ensure_stage_in_directory,
+    get_file_system_size,
     is_ondemand_eligible,
     get_file_size,
     check_filesystem_availability,
@@ -114,14 +115,21 @@ class Executor(RealExecutor):
         self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
         # print environment variables for debugging purposes
         # self.logger.debug(f"environment: {os.environ}")
-        self.logger.debug(f"Storage setting remote: {StorageSettings.__dict__}")
-        # check whether the remote path is present
+        self.logger.debug(f"Storage settings: {self.workflow.storage_settings}")
+        self.node_local_prefix = None
+        # check whether the remote path is present - then decode as it is base64 encoded
         if self.workflow.executor_settings.node_local_prefix:
-            expanded_prefix = expand_node_local_prefix(
+            decoded_prefix = base64.b64decode(
                 self.workflow.executor_settings.node_local_prefix
-            )
+            ).decode("utf-8")
+            expanded_prefix = os.path.expandvars(decoded_prefix)
+            #expanded_prefix = expand_node_local_prefix(
+            #    self.workflow.executor_settings.node_local_prefix
+            #)
             self.logger.debug(f"Using node local prefix: {expanded_prefix}")
             self.node_local_prefix = expanded_prefix
+            # we check the existence of this directory on all nodes only once:
+            ensure_stage_in_directory(expanded_prefix)
 
     @property
     def remote_storage_prefix(self) -> str | None:
@@ -140,7 +148,7 @@ class Executor(RealExecutor):
         # After submitting the job, you have to call
         # self.report_job_submission(job_info).
         # with job_info being of type
-        # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
+        # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.        
 
         for n, inputfile in enumerate(job.input):
             self.logger.debug(
@@ -167,12 +175,20 @@ class Executor(RealExecutor):
                     staged_path = stage_in_sbcast(inputfile, self.node_local_prefix)
                 else:
                     self.logger.debug(
-                        f"Staging in {inputfile} via scp (size: {size} GB)"
+                        f"Staging in {inputfile} via scp (size: {size} bytes)"
                     )
                     staged_path = stage_in_scp(inputfile, self.node_local_prefix)
+                if size is not None:
+                    remaining_stage_in_space = get_file_system_size(self.node_local_prefix)
+                    remaining_stage_in_space -= size
                 # next we need to correct the job's input path to point to the
                 # staged file
                 job.input[n] = staged_path
+            elif is_ondemand_eligible(inputfile):
+                self.logger.debug(
+                    "Skipping stage-in for on-demand eligible input because no "
+                    "node_local_prefix is configured."
+                )
 
         jobsteps = dict()
         call = None
