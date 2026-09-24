@@ -30,7 +30,11 @@ def get_nodelist():
     """
     evaluate_nodelist = os.environ.get("SLURM_NODELIST")
     if not evaluate_nodelist:
-        raise WorkflowError("unable to get 'SLURM_NODELIST'")
+    evaluate_nodelist = os.environ.get("SLURM_NODELIST")
+    if not evaluate_nodelist:
+        raise WorkflowError(
+            "SLURM_NODELIST is not set; cannot resolve allocated nodes."
+        )
     try:
         expanded = subprocess.run(
             ["scontrol", "show", "hostname", evaluate_nodelist],
