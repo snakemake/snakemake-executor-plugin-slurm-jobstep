@@ -1,5 +1,4 @@
 import os
-import re
 from pathlib import Path
 import subprocess
 
@@ -8,21 +7,6 @@ from snakemake.io.flags.access_patterns import (
     STORE_KEY,
 )
 from snakemake_interface_common.exceptions import WorkflowError
-
-_ENV_MARKER = re.compile(r"__ENV(?:__|_)([A-Z0-9]+(?:_[A-Z0-9]+)*)__")
-
-
-def expand_node_local_prefix(value: str) -> str:
-    def repl(match: re.Match[str]) -> str:
-        env_var = match.group(1)
-        env_value = os.environ.get(env_var)
-        if not env_value:
-            raise WorkflowError(
-                f"Failed to expand node local prefix because {env_var} is not set."
-            )
-        return env_value
-
-    return _ENV_MARKER.sub(repl, value)
 
 
 def is_ondemand_eligible(inputfile):
@@ -47,8 +31,7 @@ def get_nodelist():
     evaluate_nodelist = os.environ.get("SLURM_NODELIST")
     if not evaluate_nodelist:
         raise WorkflowError(
-            "Failed to get allocated nodes from SLURM environment variable "
-            "SLURM_NODELIST."
+            "SLURM_NODELIST is not set; cannot resolve allocated nodes."
         )
     try:
         expanded = subprocess.run(
@@ -85,23 +68,46 @@ def check_filesystem_availability(remote_directory):
         ) from err
 
 
-def ensure_stage_in_directory(remote_directory, remote_host=None):
+def ensure_stage_in_directory(remote_directory):
+    """
+    Ensure that the stage-in directory exists on the remote hosts.
+    If it does not exist, the job will fail.
+    """
+    nodelist = get_nodelist()
     directory = Path(remote_directory)
-    if remote_host is None:
-        directory.mkdir(parents=True, exist_ok=True)
-        return
 
+    for node in nodelist:
+        if node == get_nodename():
+            # if the node is the same as the current node, we can just
+            # check the directory locally
+            if not directory.exists():
+                raise WorkflowError(
+                    f"Failed to find stage-in directory {remote_directory} on {node}."
+                )
+            continue
+        try:
+            subprocess.run(
+                ["ssh", node, "ls", directory.as_posix()],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError) as err:
+            raise WorkflowError(
+                f"Failed to find stage-in directory {remote_directory} on {node}."
+            ) from err
+
+
+def get_file_system_size(path):
+    """
+    Get the available size of the filesystem where the path is located in GB.
+    """
     try:
-        subprocess.run(
-            ["ssh", remote_host, "mkdir", "-p", str(directory)],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError) as err:
-        raise WorkflowError(
-            f"Failed to create stage-in directory {remote_directory} on {remote_host}."
-        ) from err
+        statvfs = os.statvfs(path)
+        available_bytes = statvfs.f_bavail * statvfs.f_frsize
+        return round(available_bytes / (1024**3), 2)
+    except OSError as err:
+        raise WorkflowError(f"Failed to check filesystem for path {path}.") from err
 
 
 def stage_in_sbcast(inpath, remote_directory):
@@ -120,7 +126,6 @@ def stage_in_sbcast(inpath, remote_directory):
     # remote directory.
 
     fname = Path(inpath).name
-    ensure_stage_in_directory(remote_directory)
     remote_path = Path(remote_directory) / fname
     try:
         subprocess.run(
@@ -169,13 +174,13 @@ def stage_in_scp(inpath, remote_directory):
     remote_path = Path(remote_directory) / fname
 
     nodelist = get_nodelist()
+
     # we need to iterate over the nodelist and scp to each node,
     # as scp does not have a built-in way to copy to multiple hosts
     for node in nodelist:
         if node == get_nodename():
             # if the node is the same as the current node, we can just
             # copy the file locally
-            ensure_stage_in_directory(remote_directory)
             try:
                 subprocess.run(
                     ["cp", inpath, str(remote_path)],
@@ -188,18 +193,18 @@ def stage_in_scp(inpath, remote_directory):
                     f"Failed to stage in file {inpath} via local copy to {remote_path}."
                 ) from err
             continue
-        ensure_stage_in_directory(remote_directory, remote_host=node)
-        try:
-            subprocess.run(
-                ["scp", inpath, f"{node}:{remote_path}"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError) as err:
-            raise WorkflowError(
-                f"Failed to stage in file {inpath} via scp to {remote_path}."
-            ) from err
+        else:
+            try:
+                subprocess.run(
+                    ["scp", inpath, f"{node}:{remote_path}"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except (subprocess.CalledProcessError, FileNotFoundError) as err:
+                raise WorkflowError(
+                    f"Failed to stage in file {inpath} via scp to {remote_path}."
+                ) from err
 
     try:
         staged_path = inpath.__class__(
