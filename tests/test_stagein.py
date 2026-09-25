@@ -1,7 +1,14 @@
 import subprocess
 from types import SimpleNamespace
+import sys
+from pathlib import Path
 
 import pytest
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from snakemake_interface_common.exceptions import WorkflowError
 
 import snakemake_executor_plugin_slurm_jobstep.stagein as stagein
