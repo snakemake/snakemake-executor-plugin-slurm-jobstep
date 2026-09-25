@@ -16,6 +16,7 @@ from snakemake_executor_plugin_slurm_jobstep.stagein import (
     get_nodelist,
 )
 
+
 def test_get_nodelist_raises_when_slurm_nodelist_missing(monkeypatch):
     monkeypatch.delenv("SLURM_NODELIST", raising=False)
     with pytest.raises(WorkflowError, match="SLURM_NODELIST"):
