@@ -14,6 +14,12 @@ import ast
 import re
 import zlib
 from dataclasses import dataclass, field
+from pathlib import Path
+
+from typing import cast, Optional
+
+from snakemake.settings.types import StorageSettings
+
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
 from snakemake_interface_executor_plugins.executors.real import RealExecutor
 from snakemake_interface_executor_plugins.jobs import (
@@ -25,6 +31,15 @@ from snakemake_interface_executor_plugins.settings import (
     ExecutorSettingsBase,
 )
 from snakemake_interface_common.exceptions import WorkflowError
+
+from .stagein import (
+    expand_node_local_prefix,
+    is_ondemand_eligible,
+    get_file_size,
+    check_filesystem_availability,
+    stage_in_sbcast,
+    stage_in_scp,
+)
 
 # Required:
 # Specify common settings shared by various executors.
@@ -65,6 +80,14 @@ class ExecutorSettings(ExecutorSettingsBase):
             "required": False,
         },
     )
+    node_local_prefix: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": ("Used to pass a path to a node local directory"),
+            "env_var": False,
+            "required": False,
+        },
+    )
     array_execs: str = field(
         default="",
         metadata={
@@ -91,7 +114,26 @@ class Executor(RealExecutor):
         # is a job array task
         self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
         # print environment variables for debugging purposes
-        self.logger.debug(f"environment: {os.environ}")
+        # self.logger.debug(f"environment: {os.environ}")
+        self.logger.debug(f"Storage settings: {self.workflow.storage_settings}")
+        self.node_local_prefix = None
+        # check whether the remote path is present
+        if self.workflow.executor_settings.node_local_prefix:
+            expanded_prefix = expand_node_local_prefix(
+                self.workflow.executor_settings.node_local_prefix
+            )
+            self.logger.debug(f"Using node local prefix: {expanded_prefix}")
+            self.node_local_prefix = expanded_prefix
+
+    @property
+    def remote_storage_prefix(self) -> str | None:
+        """
+        Here, we consider the remote storage prefix to be a property of the
+        executor, because it is inherent to the execution environment on a
+        cluster.
+        """
+        storage_settings = cast(StorageSettings, self.workflow.storage_settings)
+        return storage_settings.remote_job_local_storage_prefix
 
     def run_job(self, job: JobExecutorInterface):
         # Implement here how to run a job.
@@ -101,6 +143,49 @@ class Executor(RealExecutor):
         # self.report_job_submission(job_info).
         # with job_info being of type
         # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
+
+        remaining_stage_in_space = None
+        for n, inputfile in enumerate(job.input):
+            self.logger.debug(
+                f"Checking input file {inputfile} with flags {inputfile.flags}"
+            )
+            self.logger.debug(
+                f"is_ondemand_eligible: {is_ondemand_eligible(inputfile)}"
+            )
+            if is_ondemand_eligible(inputfile) and self.node_local_prefix:
+                # if the file size is < 2GB, we use sbcast, otherwise scp
+                size = get_file_size(inputfile)
+                Path(self.node_local_prefix).mkdir(parents=True, exist_ok=True)
+                if remaining_stage_in_space is None:
+                    remaining_stage_in_space = check_filesystem_availability(
+                        self.node_local_prefix
+                    )
+                if size is not None and size > remaining_stage_in_space:
+                    raise WorkflowError(
+                        "Not enough available space on filesystem for "
+                        f"staging in {inputfile} (size: {size} bytes, "
+                        f"available: {remaining_stage_in_space} bytes)."
+                    )
+                if size is not None and size <= 4 * 1024**3:
+                    self.logger.debug(
+                        f"Staging in {inputfile} via sbcast (size: {size} bytes)"
+                    )
+                    staged_path = stage_in_sbcast(inputfile, self.node_local_prefix)
+                else:
+                    self.logger.debug(
+                        f"Staging in {inputfile} via scp (size: {size} bytes)"
+                    )
+                    staged_path = stage_in_scp(inputfile, self.node_local_prefix)
+                if size is not None:
+                    remaining_stage_in_space -= size
+                # next we need to correct the job's input path to point to the
+                # staged file
+                job.input[n] = staged_path
+            elif is_ondemand_eligible(inputfile):
+                self.logger.debug(
+                    "Skipping stage-in for on-demand eligible input because no "
+                    "node_local_prefix is configured."
+                )
 
         jobsteps = dict()
         call = None
