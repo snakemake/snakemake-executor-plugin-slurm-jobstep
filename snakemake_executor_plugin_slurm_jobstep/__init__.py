@@ -301,6 +301,7 @@ class Executor(RealExecutor):
             "SLURM_CLUSTER_NAME",
             "SLURM_SUBMIT_DIR",
             "SLURM_SUBMIT_HOST",
+            "SLURM_MEM_PER_CPU",
             "SLURM_CONF",
         }
         for var in list(popen_env):
