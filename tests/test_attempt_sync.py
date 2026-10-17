@@ -1,6 +1,6 @@
 """Tests for attempt synchronization in slurm-jobstep inner executor."""
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from pathlib import Path
 import sys
 
