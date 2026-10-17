@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.2](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.6.1...v0.6.2) (2026-10-17)
+
+
+### Bug Fixes
+
+* Add SLURM_CONF to kept environment variables ([#52](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/52)) ([907b04f](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/907b04fc2fcfb3ca7a9216d4abbe6f60fd017140))
+* Add SLURM_MEM_PER_CPU to keep_slurm variables ([#51](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/51)) ([72ab05c](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/72ab05c31ded0fd9c26060fe80677b0f0ba6e1ad))
+* Circumvent problematic Slurm re-submission ([#49](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/49)) ([a4b6327](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/a4b63272aadf77fd5d91ff5e2fa391dbc24afc60))
+* Stabilize Dependabot security updates by ignoring unresolved GitPython advisory target ([#56](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/issues/56)) ([d1c1910](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/commit/d1c1910eab7657b0e67a472f1271d218b627f14f))
+
 ## [0.6.1](https://github.com/snakemake/snakemake-executor-plugin-slurm-jobstep/compare/v0.6.0...v0.6.1) (2026-05-27)
 
 
