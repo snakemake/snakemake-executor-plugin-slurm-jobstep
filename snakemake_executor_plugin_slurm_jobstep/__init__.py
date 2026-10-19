@@ -14,7 +14,6 @@ import ast
 import re
 import zlib
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from typing import cast, Optional
 
@@ -33,7 +32,8 @@ from snakemake_interface_executor_plugins.settings import (
 from snakemake_interface_common.exceptions import WorkflowError
 
 from .stagein import (
-    expand_node_local_prefix,
+    ensure_stage_in_directory,
+    get_file_system_size,
     is_ondemand_eligible,
     get_file_size,
     check_filesystem_availability,
@@ -113,9 +113,11 @@ class Executor(RealExecutor):
         # check if SLURM_ARRAY_TASK_ID is set, to determine whether this
         # is a job array task
         self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
-        
+
         # Read inherited attempt from outer executor via ExecutorSettings
-        inherited_attempt = getattr(self.workflow.executor_settings, '_inherited_attempt', 0)
+        inherited_attempt = getattr(
+            self.workflow.executor_settings, "_inherited_attempt", 0
+        )
         if inherited_attempt > 0:
             self.inherited_attempt = inherited_attempt
             self.logger.info(
@@ -123,7 +125,7 @@ class Executor(RealExecutor):
             )
         else:
             self.inherited_attempt = None
-        
+
         # CRITICAL FIX: Disable retries for all rules in inner executor
         # The outer executor (sbatch) handles all retries
         for rule in self.workflow.rules:
@@ -133,18 +135,24 @@ class Executor(RealExecutor):
                     f"(was {rule.restart_times})"
                 )
                 rule._restart_times = 0
-        
+
         # print environment variables for debugging purposes
         # self.logger.debug(f"environment: {os.environ}")
         self.logger.debug(f"Storage settings: {self.workflow.storage_settings}")
         self.node_local_prefix = None
-        # check whether the remote path is present
+        # check whether the remote path is present - then decode as it is base64 encoded
         if self.workflow.executor_settings.node_local_prefix:
-            expanded_prefix = expand_node_local_prefix(
+            decoded_prefix = base64.b64decode(
                 self.workflow.executor_settings.node_local_prefix
-            )
+            ).decode("utf-8")
+            expanded_prefix = os.path.expandvars(decoded_prefix)
+            # expanded_prefix = expand_node_local_prefix(
+            #    self.workflow.executor_settings.node_local_prefix
+            # )
             self.logger.debug(f"Using node local prefix: {expanded_prefix}")
             self.node_local_prefix = expanded_prefix
+            # we check the existence of this directory on all nodes only once:
+            ensure_stage_in_directory(expanded_prefix)
 
     @property
     def remote_storage_prefix(self) -> str | None:
@@ -168,7 +176,7 @@ class Executor(RealExecutor):
             job.reset_params_and_resources()
         else:
             original_attempt = None
-        
+
         try:
             self._run_job_impl(job)
         finally:
@@ -177,7 +185,7 @@ class Executor(RealExecutor):
                 job.attempt = original_attempt
                 job.reset_params_and_resources()
                 self.logger.debug(f"Restored job attempt to {original_attempt}")
-    
+
     def _run_job_impl(self, job: JobExecutorInterface):
         # Implement here how to run a job.
         # You can access the job's resources, etc.
@@ -187,7 +195,6 @@ class Executor(RealExecutor):
         # with job_info being of type
         # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
 
-        remaining_stage_in_space = None
         for n, inputfile in enumerate(job.input):
             self.logger.debug(
                 f"Checking input file {inputfile} with flags {inputfile.flags}"
@@ -195,23 +202,21 @@ class Executor(RealExecutor):
             self.logger.debug(
                 f"is_ondemand_eligible: {is_ondemand_eligible(inputfile)}"
             )
-            if is_ondemand_eligible(inputfile) and self.node_local_prefix:
+            if self.node_local_prefix and is_ondemand_eligible(inputfile):
                 # if the file size is < 2GB, we use sbcast, otherwise scp
                 size = get_file_size(inputfile)
-                Path(self.node_local_prefix).mkdir(parents=True, exist_ok=True)
-                if remaining_stage_in_space is None:
-                    remaining_stage_in_space = check_filesystem_availability(
-                        self.node_local_prefix
-                    )
-                if size is not None and size > remaining_stage_in_space:
+                if size is not None and size > check_filesystem_availability(
+                    self.node_local_prefix
+                ):
+                    available = check_filesystem_availability(self.node_local_prefix)
                     raise WorkflowError(
                         "Not enough available space on filesystem for "
-                        f"staging in {inputfile} (size: {size} bytes, "
-                        f"available: {remaining_stage_in_space} bytes)."
+                        f"staging in {inputfile} (size: {size} GB, "
+                        f"available: {available} GB)."
                     )
-                if size is not None and size <= 4 * 1024**3:
+                if size is not None and size <= 4:
                     self.logger.debug(
-                        f"Staging in {inputfile} via sbcast (size: {size} bytes)"
+                        f"Staging in {inputfile} via sbcast (size: {size} GB)"
                     )
                     staged_path = stage_in_sbcast(inputfile, self.node_local_prefix)
                 else:
@@ -220,6 +225,9 @@ class Executor(RealExecutor):
                     )
                     staged_path = stage_in_scp(inputfile, self.node_local_prefix)
                 if size is not None:
+                    remaining_stage_in_space = get_file_system_size(
+                        self.node_local_prefix
+                    )
                     remaining_stage_in_space -= size
                 # next we need to correct the job's input path to point to the
                 # staged file
