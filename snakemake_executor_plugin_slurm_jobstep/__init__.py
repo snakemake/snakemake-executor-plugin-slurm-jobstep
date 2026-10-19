@@ -113,9 +113,11 @@ class Executor(RealExecutor):
         # check if SLURM_ARRAY_TASK_ID is set, to determine whether this
         # is a job array task
         self.job_array_task = os.getenv("SLURM_ARRAY_TASK_ID") is not None
-        
+
         # Read inherited attempt from outer executor via ExecutorSettings
-        inherited_attempt = getattr(self.workflow.executor_settings, '_inherited_attempt', 0)
+        inherited_attempt = getattr(
+            self.workflow.executor_settings, "_inherited_attempt", 0
+        )
         if inherited_attempt > 0:
             self.inherited_attempt = inherited_attempt
             self.logger.info(
@@ -123,7 +125,7 @@ class Executor(RealExecutor):
             )
         else:
             self.inherited_attempt = None
-        
+
         # CRITICAL FIX: Disable retries for all rules in inner executor
         # The outer executor (sbatch) handles all retries
         for rule in self.workflow.rules:
@@ -133,7 +135,7 @@ class Executor(RealExecutor):
                     f"(was {rule.restart_times})"
                 )
                 rule._restart_times = 0
-        
+
         # print environment variables for debugging purposes
         # self.logger.debug(f"environment: {os.environ}")
         self.logger.debug(f"Storage settings: {self.workflow.storage_settings}")
@@ -174,7 +176,7 @@ class Executor(RealExecutor):
             job.reset_params_and_resources()
         else:
             original_attempt = None
-        
+
         try:
             self._run_job_impl(job)
         finally:
@@ -183,7 +185,7 @@ class Executor(RealExecutor):
                 job.attempt = original_attempt
                 job.reset_params_and_resources()
                 self.logger.debug(f"Restored job attempt to {original_attempt}")
-    
+
     def _run_job_impl(self, job: JobExecutorInterface):
         # Implement here how to run a job.
         # You can access the job's resources, etc.
